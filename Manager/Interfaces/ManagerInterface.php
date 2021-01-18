@@ -17,11 +17,6 @@ interface ManagerInterface
     public function clear(): void;
 
     /**
-     * @return object
-     */
-    public function create(): object;
-
-    /**
      * @param $entity
      * @param bool $flush
      * @throws ORMException

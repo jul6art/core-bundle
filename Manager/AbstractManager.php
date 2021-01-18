@@ -7,6 +7,8 @@ use Jul6Art\CoreBundle\Repository\AbstractRepository;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\ORMException;
 use Doctrine\Persistence\Mapping\MappingException;
+use Symfony\Component\PropertyAccess\PropertyAccess;
+use Symfony\Component\PropertyAccess\PropertyAccessor;
 
 /**
  * Class AbstractManager
@@ -19,9 +21,10 @@ abstract class AbstractManager implements ManagerInterface
     protected function getAbstractRepository(): AbstractRepository
     {
         $className = explode('\\', static::class);
-        $repositoryName = str_replace('Manager', 'Repository', lcfirst(array_pop($className)));
+        $reflectionProperty = new \ReflectionProperty(static::class, str_replace('Manager', 'Repository', lcfirst(array_pop($className))));
+        $reflectionProperty->setAccessible(true);
 
-        return $this->$repositoryName;
+        return $reflectionProperty->getValue($this);
     }
 
     /**
@@ -31,11 +34,6 @@ abstract class AbstractManager implements ManagerInterface
     {
         $this->getAbstractRepository()->clear();
     }
-
-    /**
-     * @return object
-     */
-    abstract public function create(): object;
 
     /**
      * @param $entity

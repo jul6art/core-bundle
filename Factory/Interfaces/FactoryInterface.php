@@ -8,8 +8,8 @@ namespace Jul6Art\CoreBundle\Factory\Interfaces;
 interface FactoryInterface
 {
     /**
-     * @param mixed ...$param
+     * @param mixed ...$args
      * @return Object
      */
-    public static function create(...$param): Object;
+    public static function create(...$args): Object;
 }
