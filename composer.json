@@ -1,0 +1,35 @@
+{
+    "name": "jul6art/core-bundle",
+    "type": "symfony-bundle",
+    "description": "Symfony core bundle",
+    "homepage": "https://github.com/jul6art/core-bundle",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jul6Art",
+            "email": "admin@devinthehood.com",
+            "homepage": "https://devinthehood.com/"
+        }
+    ],
+    "require": {
+        "php": "^7.4",
+        "fzaninotto/faker": "^1.9",
+        "symfony/http-kernel": "^4.4 || ^5.0"
+    },
+    "require-dev": {
+        "dama/doctrine-test-bundle": "^6.0",
+        "phpunit/phpunit": "^7.0",
+        "symfony/phpunit-bridge": "^4.4 || ^5.0",
+        "symfony/var-dumper": "^4.4 || ^5.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Jul6Art\\CoreBundle\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "Tests/"
+        }
+    }
+}
