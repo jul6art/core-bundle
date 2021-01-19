@@ -2,7 +2,6 @@
 
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
-use Exception;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -98,15 +97,15 @@ class CoreExtension extends Extension implements PrependExtensionInterface
                 $emailDebugTo = $config['email_debug_to'];
 
                 if (null === $emailDebugFrom or !filter_var($emailDebugFrom, FILTER_VALIDATE_EMAIL)) {
-                    throw new \Exception(sprintf('Parameter "%s.%s" must be configured to activate email debug', $this->getAlias(), 'email_debug'));
+                    throw new \InvalidArgumentException(sprintf('Parameter "%s.%s" must be configured to activate email debug', $this->getAlias(), 'email_debug'));
                 }
 
                 if (null === $emailDebugTitle or !strlen($emailDebugTitle)) {
-                    throw new \Exception(sprintf('Parameter "%s.%s" must be configured to activate email debug', $this->getAlias(), 'email_title'));
+                    throw new \InvalidArgumentException(sprintf('Parameter "%s.%s" must be configured to activate email debug', $this->getAlias(), 'email_title'));
                 }
 
                 if (null === $emailDebugTo or !filter_var($emailDebugTo, FILTER_VALIDATE_EMAIL)) {
-                    throw new \Exception(sprintf('Parameter "%s.%s" must be configured to activate email debug', $this->getAlias(), 'email_to'));
+                    throw new \InvalidArgumentException(sprintf('Parameter "%s.%s" must be configured to activate email debug', $this->getAlias(), 'email_to'));
                 }
 
                 if (isset($bundles['SwiftmailerBundle'])) {

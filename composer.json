@@ -14,7 +14,15 @@
     "require": {
         "php": "^7.4",
         "fzaninotto/faker": "^1.9",
-        "symfony/http-kernel": "^4.4 || ^5.0"
+        "symfony/config": "^4.4 || ^5.0",
+        "symfony/dependency-injection": "^4.4 || ^5.0",
+        "symfony/event-dispatcher": "^4.4 || ^5.0",
+        "symfony/http-foundation": "^4.4 || ^5.0",
+        "symfony/http-kernel": "^4.4 || ^5.0",
+        "symfony/orm-pack": "^1.0",
+        "symfony/property-access": "^4.4",
+        "symfony/security-bundle": "^4.4 || ^5.0",
+        "symfony/translation": "^4.4 || ^5.0"
     },
     "require-dev": {
         "dama/doctrine-test-bundle": "^6.0",

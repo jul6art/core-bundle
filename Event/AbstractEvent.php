@@ -22,6 +22,14 @@ abstract class AbstractEvent extends Event implements EventInterface
     protected $data;
 
     /**
+     * AbstractEvent constructor.
+     */
+    public function __construct()
+    {
+        $this->data = new ArrayCollection();
+    }
+
+    /**
      * @return ArrayCollection
      */
     public function getData(): ArrayCollection
