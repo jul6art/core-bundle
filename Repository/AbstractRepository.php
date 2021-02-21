@@ -2,14 +2,14 @@
 
 namespace Jul6Art\CoreBundle\Repository;
 
-use Jul6Art\CoreBundle\Repository\Interfaces\RepositoryInterface;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\ORMException;
 use Doctrine\Persistence\Mapping\MappingException;
+use Jul6Art\CoreBundle\Repository\Interfaces\RepositoryInterface;
 
 /**
- * Class AbstractRepository
+ * Class AbstractRepository.
  */
 abstract class AbstractRepository extends ServiceEntityRepository implements RepositoryInterface
 {
@@ -24,6 +24,7 @@ abstract class AbstractRepository extends ServiceEntityRepository implements Rep
     /**
      * @param $entity
      * @param bool $flush
+     *
      * @throws ORMException
      */
     public function delete($entity, $flush = true): void
@@ -47,6 +48,7 @@ abstract class AbstractRepository extends ServiceEntityRepository implements Rep
     /**
      * @param $entity
      * @param bool $flush
+     *
      * @throws ORMException
      * @throws OptimisticLockException
      */

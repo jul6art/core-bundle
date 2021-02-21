@@ -24,9 +24,6 @@ trait TokenStorageAwareTrait
         $this->tokenStorage = $tokenStorage;
     }
 
-    /**
-     * @return int|null
-     */
     public function getCurrentUserIdOrNull(): ?int
     {
         $user = $this->getCurrentUserOrNull();
@@ -38,9 +35,6 @@ trait TokenStorageAwareTrait
         return null;
     }
 
-    /**
-     * @return UserInterface|null
-     */
     public function getCurrentUserOrNull(): ?UserInterface
     {
         $token = $this->tokenStorage->getToken();

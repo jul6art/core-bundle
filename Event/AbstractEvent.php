@@ -2,12 +2,12 @@
 
 namespace Jul6Art\CoreBundle\Event;
 
-use Jul6Art\CoreBundle\Event\Interfaces\EventInterface;
 use Doctrine\Common\Collections\ArrayCollection;
+use Jul6Art\CoreBundle\Event\Interfaces\EventInterface;
 use Symfony\Contracts\EventDispatcher\Event;
 
 /**
- * Class AbstractEvent
+ * Class AbstractEvent.
  */
 abstract class AbstractEvent extends Event implements EventInterface
 {
@@ -29,26 +29,24 @@ abstract class AbstractEvent extends Event implements EventInterface
         $this->data = new ArrayCollection();
     }
 
-    /**
-     * @return ArrayCollection
-     */
     public function getData(): ArrayCollection
     {
         return $this->data;
     }
 
     /**
-     * @param ArrayCollection $data
      * @return $this
      */
     public function setData(ArrayCollection $data): self
     {
         $this->data = $data;
+
         return $this;
     }
 
     /**
      * @param $data
+     *
      * @return $this
      */
     public function addData($data): self
@@ -62,6 +60,7 @@ abstract class AbstractEvent extends Event implements EventInterface
 
     /**
      * @param $data
+     *
      * @return $this
      */
     public function removeData($data): self

@@ -3,9 +3,8 @@
 namespace Jul6Art\CoreBundle\EntityListener\Interfaces;
 
 /**
- * Interface EntityListenerInterface
+ * Interface EntityListenerInterface.
  */
 interface EntityListenerInterface
 {
-
 }

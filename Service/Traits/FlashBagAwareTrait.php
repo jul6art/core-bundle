@@ -5,7 +5,7 @@ namespace Jul6Art\CoreBundle\Service\Traits;
 use Symfony\Component\HttpFoundation\Session\Flash\FlashBagInterface;
 
 /**
- * Class FlashBagAwareTrait
+ * Class FlashBagAwareTrait.
  */
 trait FlashBagAwareTrait
 {

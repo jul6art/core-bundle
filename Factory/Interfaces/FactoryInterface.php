@@ -3,13 +3,12 @@
 namespace Jul6Art\CoreBundle\Factory\Interfaces;
 
 /**
- * Interface FactoryInterface
+ * Interface FactoryInterface.
  */
 interface FactoryInterface
 {
     /**
      * @param mixed ...$args
-     * @return Object
      */
-    public static function create(...$args): Object;
+    public static function create(...$args): object;
 }

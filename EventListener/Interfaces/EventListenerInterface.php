@@ -3,9 +3,8 @@
 namespace Jul6Art\CoreBundle\EventListener\Interfaces;
 
 /**
- * Interface EventListenerInterface
+ * Interface EventListenerInterface.
  */
 interface EventListenerInterface
 {
-
 }
