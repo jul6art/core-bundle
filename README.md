@@ -17,7 +17,7 @@ Symfony core bundle
 Requirements
 ------------
 
-* **php ^7.4**
+* **php ^7.4 || ^8.0**
 * **symfony ^4.4 || ^5.0**
 
 Installation
