@@ -23,14 +23,14 @@ Requirements
 Installation
 ------------
 
-```shell
+```console
 composer require jul6art/core-bundle
 ```
 
 Start server
 ------------
 
-```shell
+```console
 cd my_symfony_application
 symfony server:start
 ```
