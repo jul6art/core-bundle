@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Event\Interfaces;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -9,24 +11,17 @@ use Doctrine\Common\Collections\ArrayCollection;
  */
 interface EventInterface
 {
+    /**
+     * @return ArrayCollection<int, mixed>
+     */
     public function getData(): ArrayCollection;
 
     /**
-     * @return $this
+     * @param ArrayCollection<int, mixed> $data
      */
-    public function setData(ArrayCollection $data): self;
+    public function setData(ArrayCollection $data): static;
 
-    /**
-     * @param $data
-     *
-     * @return $this
-     */
-    public function addData($data): self;
+    public function addData(mixed $data): static;
 
-    /**
-     * @param $data
-     *
-     * @return $this
-     */
-    public function removeData($data): self;
+    public function removeData(mixed $data): static;
 }

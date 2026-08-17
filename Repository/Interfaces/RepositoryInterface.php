@@ -1,68 +1,38 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Repository\Interfaces;
 
 use Doctrine\ORM\OptimisticLockException;
-use Doctrine\ORM\ORMException;
-use Doctrine\Persistence\Mapping\MappingException;
+use Doctrine\Persistence\ObjectRepository;
 
 /**
  * Interface RepositoryInterface.
+ *
+ * find(), findAll(), findBy() and findOneBy() are inherited from ObjectRepository
+ * rather than redeclared, so their signatures cannot drift from Doctrine's.
+ *
+ * @template TEntity of object
+ *
+ * @extends ObjectRepository<TEntity>
  */
-interface RepositoryInterface
+interface RepositoryInterface extends ObjectRepository
 {
-    /**
-     * @throws MappingException
-     */
-    public function clear();
+    public function clear(): void;
 
     /**
-     * @param $entity
-     * @param bool $flush
-     *
-     * @throws ORMException
+     * @param TEntity $entity
      */
-    public function delete($entity, $flush = true): void;
+    public function delete(object $entity, bool $flush = true): void;
 
     /**
-     * @param $id
-     * @param null $lockMode
-     * @param null $lockVersion
-     *
-     * @return mixed
-     */
-    public function find($id, $lockMode = null, $lockVersion = null);
-
-    /**
-     * @return mixed
-     */
-    public function findAll();
-
-    /**
-     * @param null $limit
-     * @param null $offset
-     *
-     * @return mixed
-     */
-    public function findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null);
-
-    /**
-     * @return mixed
-     */
-    public function findOneBy(array $criteria, array $orderBy = null);
-
-    /**
-     * @throws ORMException
      * @throws OptimisticLockException
      */
     public function flush(): void;
 
     /**
-     * @param $entity
-     * @param bool $flush
-     *
-     * @throws ORMException
-     * @throws OptimisticLockException
+     * @param TEntity $entity
      */
-    public function save($entity, $flush = true): void;
+    public function save(object $entity, bool $flush = true): void;
 }

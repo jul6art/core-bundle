@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Service\Traits;
 
+use Symfony\Contracts\Service\Attribute\Required;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
@@ -9,14 +12,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 trait TranslatorAwareTrait
 {
-    /**
-     * @var TranslatorInterface
-     */
-    protected $translator;
+    protected TranslatorInterface $translator;
 
-    /**
-     * @required
-     */
+    #[Required]
     public function setTranslator(TranslatorInterface $translator): void
     {
         $this->translator = $translator;

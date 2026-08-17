@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Entity\Traits;
 
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
@@ -9,14 +12,10 @@ use Doctrine\ORM\Mapping as ORM;
  */
 trait IdTrait
 {
-    /**
-     * @var int|null
-     *
-     * @ORM\Id
-     * @ORM\Column(type="integer")
-     * @ORM\GeneratedValue(strategy="IDENTITY")
-     */
-    protected $id;
+    #[ORM\Id]
+    #[ORM\Column(type: Types::INTEGER)]
+    #[ORM\GeneratedValue(strategy: 'IDENTITY')]
+    protected ?int $id = null;
 
     public function getId(): ?int
     {

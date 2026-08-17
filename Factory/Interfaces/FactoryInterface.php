@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Factory\Interfaces;
 
 /**
@@ -7,8 +9,5 @@ namespace Jul6Art\CoreBundle\Factory\Interfaces;
  */
 interface FactoryInterface
 {
-    /**
-     * @param mixed ...$args
-     */
-    public static function create(...$args): object;
+    public static function create(mixed ...$args): object;
 }

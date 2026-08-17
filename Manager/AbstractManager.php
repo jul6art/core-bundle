@@ -1,76 +1,91 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Manager;
 
 use Doctrine\ORM\OptimisticLockException;
-use Doctrine\ORM\ORMException;
-use Doctrine\Persistence\Mapping\MappingException;
 use Jul6Art\CoreBundle\Manager\Interfaces\ManagerInterface;
 use Jul6Art\CoreBundle\Repository\AbstractRepository;
 
 /**
  * Class AbstractManager.
+ *
+ * @template TEntity of object
+ *
+ * @implements ManagerInterface<TEntity>
  */
 abstract class AbstractManager implements ManagerInterface
 {
+    /**
+     * Resolves the repository held by this manager: a "FooManager" is expected to
+     * declare a "$fooRepository" property.
+     *
+     * @return AbstractRepository<TEntity>
+     *
+     * @throws \ReflectionException if the expected property is not declared
+     */
     protected function getAbstractRepository(): AbstractRepository
     {
-        $className = explode('\\', static::class);
-        $reflectionProperty = new \ReflectionProperty(static::class, str_replace('Manager', 'Repository', lcfirst(array_pop($className))));
-        $reflectionProperty->setAccessible(true);
+        $reflection = new \ReflectionClass(static::class);
+        $propertyName = str_replace('Manager', 'Repository', lcfirst($reflection->getShortName()));
 
-        return $reflectionProperty->getValue($this);
+        $repository = $reflection->getProperty($propertyName)->getValue($this);
+
+        if (!$repository instanceof AbstractRepository) {
+            throw new \LogicException(\sprintf('Property "%s::$%s" must hold an instance of "%s", got "%s".', static::class, $propertyName, AbstractRepository::class, get_debug_type($repository)));
+        }
+
+        return $repository;
     }
 
-    /**
-     * @throws MappingException
-     */
+    #[\Override]
     public function clear(): void
     {
         $this->getAbstractRepository()->clear();
     }
 
     /**
-     * @param $entity
-     * @param bool $flush
-     *
-     * @throws ORMException
+     * @param TEntity $entity
      */
-    public function delete($entity, $flush = true): void
+    #[\Override]
+    public function delete(object $entity, bool $flush = true): void
     {
         $this->getAbstractRepository()->delete($entity, $flush);
     }
 
     /**
-     * @throws ORMException
      * @throws OptimisticLockException
      */
+    #[\Override]
     public function flush(): void
     {
         $this->getAbstractRepository()->flush();
     }
 
     /**
-     * @return object[]
+     * @return iterable<int, TEntity>
      */
+    #[\Override]
     public function getAll(): iterable
     {
         return $this->getAbstractRepository()->findAll();
     }
 
+    /**
+     * @return TEntity|null
+     */
+    #[\Override]
     public function getById(int $id): ?object
     {
         return $this->getAbstractRepository()->find($id);
     }
 
     /**
-     * @param $entity
-     * @param bool $flush
-     *
-     * @throws ORMException
-     * @throws OptimisticLockException
+     * @param TEntity $entity
      */
-    public function save($entity, $flush = true): void
+    #[\Override]
+    public function save(object $entity, bool $flush = true): void
     {
         $this->getAbstractRepository()->save($entity, $flush);
     }

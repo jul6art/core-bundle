@@ -3,19 +3,11 @@ services:
     Jul6Art\CoreBundle\EntityListener\AbstractEntityListener:
         abstract: true
         calls:
-            - [setFlashBag, ['@session.flash_bag']]
-            - [setTokenStorage, ['@security.token_storage']]
-            - [setTranslator, ['@translator']]
+            - setRequestStack: ['@request_stack']
+            - setTokenStorage: ['@security.token_storage']
+            - setTranslator: ['@translator']
 
     Jul6Art\CoreBundle\EventListener\AbstractEventListener:
         abstract: true
         calls:
-            - [setTokenStorage, ['@security.token_storage']]
-
-    Jul6Art\CoreBundle\Service\Pusher:
-        calls:
-            - [setBus, ['@messenger.default_bus']]
-            - [setPublisher, ['@Symfony\Component\Mercure\PublisherInterface']]
-        arguments:
-            - '%push.async%'
-            - '%push.enabled%'
+            - setTokenStorage: ['@security.token_storage']

@@ -1,52 +1,45 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Service\Traits;
 
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Contracts\Service\Attribute\Required;
 
 /**
  * Trait TokenStorageAwareTrait.
  */
 trait TokenStorageAwareTrait
 {
-    /**
-     * @var TokenStorageInterface
-     */
-    protected $tokenStorage;
+    protected TokenStorageInterface $tokenStorage;
 
-    /**
-     * @required
-     */
+    #[Required]
     public function setTokenStorage(TokenStorageInterface $tokenStorage): void
     {
         $this->tokenStorage = $tokenStorage;
     }
 
+    /**
+     * UserInterface does not expose an identifier, so this only resolves for user
+     * classes that actually declare one - typically through IdTrait.
+     */
     public function getCurrentUserIdOrNull(): ?int
     {
         $user = $this->getCurrentUserOrNull();
 
-        if ($user instanceof UserInterface) {
-            return $user->getId();
+        if (null === $user || !method_exists($user, 'getId')) {
+            return null;
         }
 
-        return null;
+        $id = $user->getId();
+
+        return is_numeric($id) ? (int) $id : null;
     }
 
     public function getCurrentUserOrNull(): ?UserInterface
     {
-        $token = $this->tokenStorage->getToken();
-
-        if ($token instanceof TokenInterface) {
-            $user = $token->getUser();
-
-            if ($user instanceof UserInterface) {
-                return $user;
-            }
-        }
-
-        return null;
+        return $this->tokenStorage->getToken()?->getUser();
     }
 }

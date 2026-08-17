@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
@@ -10,23 +12,31 @@ use Symfony\Component\Config\Definition\ConfigurationInterface;
  */
 class Configuration implements ConfigurationInterface
 {
-    /**
-     * {@inheritdoc}
-     */
-    public function getConfigTreeBuilder()
+    #[\Override]
+    public function getConfigTreeBuilder(): TreeBuilder
     {
-        $builder = new TreeBuilder('core');
+        $treeBuilder = new TreeBuilder('core');
 
-        $node = $builder->getRootNode();
-
-        $node
+        $treeBuilder->getRootNode()
             ->children()
-                ->scalarNode('email_debug')->defaultFalse()->end()
-                ->scalarNode('email_debug_from')->defaultNull()->end()
-                ->scalarNode('email_debug_title')->defaultValue('An error occured')->end()
-                ->scalarNode('email_debug_to')->defaultNull()->end()
+                ->booleanNode('email_debug')
+                    ->info('Forwards critical logs by email through Monolog.')
+                    ->defaultFalse()
+                ->end()
+                ->scalarNode('email_debug_from')
+                    ->info('Sender address. Required when email_debug is enabled.')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('email_debug_title')
+                    ->info('Subject of the debug emails.')
+                    ->defaultValue('An error occured')
+                ->end()
+                ->scalarNode('email_debug_to')
+                    ->info('Recipient address. Required when email_debug is enabled.')
+                    ->defaultNull()
+                ->end()
             ->end();
 
-        return $builder;
+        return $treeBuilder;
     }
 }

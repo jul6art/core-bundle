@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Event;
 
 use Doctrine\Common\Collections\ArrayCollection;
@@ -11,45 +13,37 @@ use Symfony\Contracts\EventDispatcher\Event;
  */
 abstract class AbstractEvent extends Event implements EventInterface
 {
-    public const CREATED = 'event.created';
-    public const DELETED = 'event.deleted';
-    public const EDITED = 'event.edited';
-    public const VIEWED = 'event.viewed';
+    public const string CREATED = 'event.created';
+    public const string DELETED = 'event.deleted';
+    public const string EDITED = 'event.edited';
+    public const string VIEWED = 'event.viewed';
 
     /**
-     * @var ArrayCollection
+     * @var ArrayCollection<int, mixed>
      */
-    protected $data;
+    protected ArrayCollection $data;
 
-    /**
-     * AbstractEvent constructor.
-     */
     public function __construct()
     {
         $this->data = new ArrayCollection();
     }
 
+    #[\Override]
     public function getData(): ArrayCollection
     {
         return $this->data;
     }
 
-    /**
-     * @return $this
-     */
-    public function setData(ArrayCollection $data): self
+    #[\Override]
+    public function setData(ArrayCollection $data): static
     {
         $this->data = $data;
 
         return $this;
     }
 
-    /**
-     * @param $data
-     *
-     * @return $this
-     */
-    public function addData($data): self
+    #[\Override]
+    public function addData(mixed $data): static
     {
         if (!$this->data->contains($data)) {
             $this->data->add($data);
@@ -58,12 +52,8 @@ abstract class AbstractEvent extends Event implements EventInterface
         return $this;
     }
 
-    /**
-     * @param $data
-     *
-     * @return $this
-     */
-    public function removeData($data): self
+    #[\Override]
+    public function removeData(mixed $data): static
     {
         if ($this->data->contains($data)) {
             $this->data->removeElement($data);

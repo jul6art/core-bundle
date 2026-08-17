@@ -1,35 +1,37 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jul6Art\CoreBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\OptimisticLockException;
-use Doctrine\ORM\ORMException;
-use Doctrine\Persistence\Mapping\MappingException;
 use Jul6Art\CoreBundle\Repository\Interfaces\RepositoryInterface;
 
 /**
  * Class AbstractRepository.
+ *
+ * @template TEntity of object
+ *
+ * @extends ServiceEntityRepository<TEntity>
+ *
+ * @implements RepositoryInterface<TEntity>
  */
 abstract class AbstractRepository extends ServiceEntityRepository implements RepositoryInterface
 {
-    /**
-     * @throws MappingException
-     */
+    #[\Override]
     public function clear(): void
     {
-        $this->_em->clear();
+        $this->getEntityManager()->clear();
     }
 
     /**
-     * @param $entity
-     * @param bool $flush
-     *
-     * @throws ORMException
+     * @param TEntity $entity
      */
-    public function delete($entity, $flush = true): void
+    #[\Override]
+    public function delete(object $entity, bool $flush = true): void
     {
-        $this->_em->remove($entity);
+        $this->getEntityManager()->remove($entity);
 
         if ($flush) {
             $this->flush();
@@ -37,24 +39,21 @@ abstract class AbstractRepository extends ServiceEntityRepository implements Rep
     }
 
     /**
-     * @throws ORMException
      * @throws OptimisticLockException
      */
+    #[\Override]
     public function flush(): void
     {
-        $this->_em->flush();
+        $this->getEntityManager()->flush();
     }
 
     /**
-     * @param $entity
-     * @param bool $flush
-     *
-     * @throws ORMException
-     * @throws OptimisticLockException
+     * @param TEntity $entity
      */
-    public function save($entity, $flush = true): void
+    #[\Override]
+    public function save(object $entity, bool $flush = true): void
     {
-        $this->_em->persist($entity);
+        $this->getEntityManager()->persist($entity);
 
         if ($flush) {
             $this->flush();

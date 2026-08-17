@@ -4,21 +4,19 @@
 
 <p align="center">
     <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-    <img src="https://img.shields.io/static/v1?label=stable&message=v1&color=orange" alt="Version">
+    <img src="https://img.shields.io/static/v1?label=stable&message=v2&color=orange" alt="Version">
 </p>
 
 jul6art/core-bundle
-===================
+==============
 Symfony core bundle
--------------------------------------
-
-> :warning: Work in progress so keep calm. The good news: this is maintained!
+----------------------
 
 Requirements
 ------------
 
-* **php ^7.4 || ^8.0**
-* **symfony ^4.4 || ^5.0**
+* **php ^8.5**
+* **symfony ^7.4 || ^8.0**
 
 Installation
 ------------
@@ -34,6 +32,37 @@ Start server
 cd my_symfony_application
 symfony server:start
 ```
+
+Configuration
+-------------
+
+Every option is optional. `email_debug` forwards critical logs by email through
+Monolog and requires `symfony/monolog-bundle` plus `symfony/mailer`.
+
+```yaml
+# config/packages/core.yaml
+core:
+    email_debug: false
+    email_debug_from: ~
+    email_debug_title: 'An error occured'
+    email_debug_to: ~
+```
+
+Each option is also exposed as a container parameter, prefixed with `core.`
+(`core.email_debug`, `core.email_debug_from`, ...).
+
+Quality assurance
+-----------------
+
+```shell
+composer qa           # coding standards, Rector, static analysis and tests
+composer test         # PHPUnit
+composer phpstan      # PHPStan, level max
+composer cs           # PHP-CS-Fixer, writes the fixes
+composer rector       # Rector, writes the fixes
+```
+
+`cs-check` and `rector-check` are the read-only variants used by the CI.
 
 License
 -------

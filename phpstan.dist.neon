@@ -1,0 +1,19 @@
+parameters:
+    level: max
+    phpVersion:
+        min: 80500
+        max: 80599
+    paths:
+        - CoreBundle.php
+        - DependencyInjection
+        - Entity
+        - EntityListener
+        - Event
+        - EventListener
+        - Factory
+        - Manager
+        - Repository
+        - Service
+        - Tests
+        - rector.php
+    treatPhpDocTypesAsCertain: false
