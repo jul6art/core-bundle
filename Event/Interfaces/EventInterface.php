@@ -12,12 +12,12 @@ use Doctrine\Common\Collections\ArrayCollection;
 interface EventInterface
 {
     /**
-     * @return ArrayCollection<int, mixed>
+     * @return ArrayCollection<array-key, mixed>
      */
     public function getData(): ArrayCollection;
 
     /**
-     * @param ArrayCollection<int, mixed> $data
+     * @param ArrayCollection<array-key, mixed> $data
      */
     public function setData(ArrayCollection $data): static;
 

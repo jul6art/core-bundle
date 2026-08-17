@@ -116,7 +116,7 @@ final class AbstractEventTest extends TestCase
     /**
      * @param list<mixed> $items
      *
-     * @return ArrayCollection<int, mixed>
+     * @return ArrayCollection<array-key, mixed>
      */
     private function collection(array $items = []): ArrayCollection
     {

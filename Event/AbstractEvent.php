@@ -19,7 +19,7 @@ abstract class AbstractEvent extends Event implements EventInterface
     public const string VIEWED = 'event.viewed';
 
     /**
-     * @var ArrayCollection<int, mixed>
+     * @var ArrayCollection<array-key, mixed>
      */
     protected ArrayCollection $data;
 
