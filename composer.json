@@ -18,7 +18,6 @@
         "doctrine/doctrine-bundle": "^2.13 || ^3.0",
         "doctrine/orm": "^3.3",
         "doctrine/persistence": "^3.4 || ^4.0",
-        "fakerphp/faker": "^1.24",
         "symfony/config": "^7.4 || ^8.0",
         "symfony/dependency-injection": "^7.4 || ^8.0",
         "symfony/event-dispatcher": "^7.4 || ^8.0",
@@ -31,6 +30,7 @@
         "symfony/yaml": "^7.4 || ^8.0"
     },
     "require-dev": {
+        "fakerphp/faker": "^1.24",
         "friendsofphp/php-cs-fixer": "^3.68",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.1",
@@ -46,6 +46,7 @@
         "symfony/var-dumper": "^7.4 || ^8.0"
     },
     "suggest": {
+        "fakerphp/faker": "Required by the FakerAwareTrait (data fixtures)",
         "symfony/mailer": "Required by the email_debug handler (Monolog symfony_mailer type)",
         "symfony/monolog-bundle": "To enable the prod logging and the email_debug handlers configured by this bundle"
     },

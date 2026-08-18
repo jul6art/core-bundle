@@ -25,6 +25,18 @@ Installation
 composer require jul6art/core-bundle
 ```
 
+Optional packages
+-----------------
+
+The bundle ships a few opt-in bricks whose dependencies are deliberately left out
+of the runtime requirements. Install them yourself when you use the matching
+feature:
+
+| Feature | Package |
+| --- | --- |
+| `Service\Traits\FakerAwareTrait` (data fixtures) | `composer require --dev fakerphp/faker` |
+| `core.email_debug` handler | `composer require symfony/monolog-bundle symfony/mailer` |
+
 Start server
 ------------
 
