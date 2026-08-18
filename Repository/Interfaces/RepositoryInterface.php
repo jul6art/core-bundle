@@ -22,6 +22,15 @@ interface RepositoryInterface extends ObjectRepository
     public function clear(): void;
 
     /**
+     * Doctrine's ObjectRepository does not declare it, though every ORM
+     * repository implements it - a repository contract without a count is
+     * unusable in practice.
+     *
+     * @param array<string, mixed> $criteria
+     */
+    public function count(array $criteria = []): int;
+
+    /**
      * @param TEntity $entity
      */
     public function delete(object $entity, bool $flush = true): void;
