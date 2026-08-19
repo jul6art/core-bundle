@@ -6,6 +6,7 @@ namespace Jul6Art\CoreBundle\Tests\Fixtures;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
+use Jul6Art\CoreBundle\Controller\BulkActionRunner;
 use Jul6Art\CoreBundle\CoreBundle;
 use Jul6Art\CoreBundle\Doctrine\DQL\JsonTextFunction;
 use Jul6Art\CoreBundle\Doctrine\SoftDeleteFilter;
@@ -18,6 +19,7 @@ use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
+use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEntityListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEventListener;
@@ -121,7 +123,9 @@ final class TestKernel extends Kernel
                     'twig',
                     'security.token_storage',
                     'security.untracked_token_storage',
+                    BulkActionRunner::class,
                     CascadeSoftDeleteHelper::class,
+                    FlashTranslator::class,
                     DashboardVoter::class,
                     EncryptedTypeRegistrar::class,
                     Encryptor::class,

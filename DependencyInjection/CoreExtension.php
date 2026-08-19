@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
 use Jul6Art\CoreBundle\Command\PurgeCommand;
+use Jul6Art\CoreBundle\Controller\BulkActionRunner;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
+use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
 use Jul6Art\CoreBundle\Twig\PdfAssetExtension;
@@ -24,6 +26,7 @@ use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\Form\AbstractTypeExtension;
 use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Twig\Extension\AbstractExtension;
 
 /**
@@ -61,6 +64,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerSecurityHeaders($container, \is_array($config['security_headers'] ?? null) ? $config['security_headers'] : []);
         $this->registerCaptcha($container, \is_array($config['captcha'] ?? null) ? $config['captcha'] : []);
         $this->registerFormatting($container, $config);
+        $this->registerFlashTranslator($container, \is_array($config['flash'] ?? null) ? $config['flash'] : []);
         $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
     }
 
@@ -129,6 +133,24 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             $container->register(NumberTypeGroupingExtension::class, NumberTypeGroupingExtension::class)
                 ->addTag('form.type_extension');
         }
+    }
+
+    /**
+     * Subscribed by {@see \Jul6Art\CoreBundle\Controller\AbstractController}, so it is always
+     * registered: `symfony/translation` is a hard requirement of this bundle.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerFlashTranslator(ContainerBuilder $container, array $config): void
+    {
+        $domainMap = $config['domain_map'] ?? [];
+
+        $container->register(FlashTranslator::class, FlashTranslator::class)
+            ->setArguments([
+                new Reference('translator'),
+                \is_array($domainMap) ? $domainMap : [],
+                self::asStringOr($config['default_domain'] ?? null, 'messages'),
+            ]);
     }
 
     private static function asStringOr(mixed $value, string $fallback): string
@@ -222,6 +244,25 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             ->setArguments([new Reference('doctrine.orm.entity_manager')]);
 
         $this->registerPurgeCommand($container, $purgeBatchSize, $purgeAliases);
+        $this->registerBulkActionRunner($container);
+    }
+
+    /**
+     * Needs the ORM and symfony/security-csrf: a bulk endpoint without a CSRF check is exactly
+     * what this helper exists to prevent, so no token manager means no helper.
+     */
+    private function registerBulkActionRunner(ContainerBuilder $container): void
+    {
+        if (!interface_exists(CsrfTokenManagerInterface::class)) {
+            return;
+        }
+
+        $container->register(BulkActionRunner::class, BulkActionRunner::class)
+            ->setArguments([
+                new Reference('doctrine.orm.entity_manager'),
+                new Reference('security.helper'),
+                new Reference('security.csrf.token_manager'),
+            ]);
     }
 
     /**

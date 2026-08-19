@@ -29,6 +29,7 @@ final class ConfigurationTest extends TestCase
             'email_debug_from' => null,
             'email_debug_title' => 'An error occured',
             'email_debug_to' => null,
+            'flash' => ['default_domain' => 'messages', 'domain_map' => []],
             'number_format' => [
                 'decimal_separator' => ',',
                 'thousands_separator' => "\u{00A0}",
@@ -94,6 +95,15 @@ final class ConfigurationTest extends TestCase
 
         self::assertIsArray($headers);
         self::assertSame('%env(bool:CSP_ENFORCE)%', $headers['csp_enforce']);
+    }
+
+    /** The map's order is significant, so processing must not sort or re-key it. */
+    public function testTheFlashDomainMapKeepsItsOrderAndItsKeys(): void
+    {
+        $flash = $this->process([['flash' => ['domain_map' => ['organization.domain.' => 'domain', 'organization.' => 'organization']]]])['flash'];
+
+        self::assertIsArray($flash);
+        self::assertSame(['organization.domain.' => 'domain', 'organization.' => 'organization'], $flash['domain_map']);
     }
 
     /** Header overrides must survive processing verbatim, including their casing. */

@@ -40,6 +40,9 @@ feature:
 | `Command\PurgeCommand` (`core:purge`) | `composer require symfony/console symfony/lock` — and `symfony/expression-language` only if a policy uses a `condition` |
 | `Twig\NumberExtension`, `Twig\PdfAssetExtension` | `composer require twig/twig` (registered only when Twig is present) |
 | `Form\Extension\NumberTypeGroupingExtension` | `composer require symfony/form` |
+| `Controller\AbstractController` (et `addFormError()`) | `composer require symfony/framework-bundle symfony/form` |
+| `Controller\BulkActionRunner` | `composer require symfony/security-csrf` (le service n'est enregistré que si le gestionnaire de jetons existe) |
+| `Controller\BulkActionRunner` | `composer require symfony/security-csrf` (and the ORM) |
 
 Start server
 ------------
@@ -255,6 +258,132 @@ doctrine:
 - **`Doctrine\DQL\JsonTextFunction`** exposes `JSON_TEXT(field)`, casting a JSON column
   to text so a portable `LIKE` can search it (`field::text` on PostgreSQL,
   `CAST(field AS CHAR)` elsewhere).
+
+Controllers
+-----------
+
+`Controller\AbstractController` carries the redirect-and-flash vocabulary a controller repeats
+on every write. Each helper flashes a message **already translated in its own domain**, so a
+controller never names a domain and never injects the translator just to say "saved".
+
+```php
+final class UserController extends AbstractController
+{
+    public function edit(Request $request, User $user): Response
+    {
+        // …
+        return $this->redirectBackWithSuccess($request, 'user.updated', 'user_index');
+    }
+}
+```
+
+Three redirects worth telling apart:
+
+| Helper | Where it lands |
+| --- | --- |
+| `redirectWithSuccess()` / `redirectWithError()` | a named route, with a flash |
+| `redirectBack()` / `redirectBackWithSuccess()` | the Referer **when it is same-origin**, otherwise a fallback route — for an entity reachable from several screens, it is the only thing that knows where the user came from. A Referer on another host is ignored rather than trusted: following it would be an open redirect. |
+| `redirectAfterSave()` | the detail page, or an empty creation form when the request carries `_after_save=new` — the "save and create another" workflow. Asking for it without a creation route falls back rather than failing. |
+| `redirectAfterDelete()` | always the index, **ignoring the Referer** on purpose: after a soft delete, the detail page it points at would 404. |
+
+Plus `addSuccessFlash()` / `addErrorFlash()` / `addWarningFlash()`, and `addFormError()` — which
+pre-translates, because `form_errors(form)` looks a key up in the `validators` domain and renders
+it raw when it is missing.
+
+```yaml
+core:
+    flash:
+        default_domain: 'messages'
+        domain_map:
+            'organization.domain.': 'domain'    # longer prefix first
+            'organization.': 'organization'
+            'user.': 'user'
+```
+
+> ⚠️ **The map's order is significant.** The first matching prefix wins, so a longer prefix must
+> be declared before the shorter one it starts with — otherwise `organization.domain.added` is
+> translated in the `organization` domain and never reaches `domain`.
+
+Configure nothing and you get plain Symfony behaviour: every flash in the default domain. That is
+why an application can adopt this base class before deciding how to split its translations.
+
+### When the domain belongs to the screen, not to the key
+
+The map above assumes keys carry their domain as a prefix. Plenty of applications do the
+opposite: one catalogue per screen, and short keys inside it — `edit.success` in `profile`,
+`invalid_data` in `report`. No prefix map can express that, because the domain is not a function
+of the key. Override `translationDomain()` instead, and map nothing:
+
+```php
+final class ProfileController extends AbstractController
+{
+    protected function translationDomain(): string
+    {
+        return 'profile';   // flashes, form errors and trans() alike
+    }
+
+    public function edit(Request $request): Response
+    {
+        // …
+        return $this->redirectWithSuccess('profile_show', 'edit.success');   // → domain 'profile'
+    }
+}
+```
+
+A controller's own domain **wins over the map**, so a key that happens to look like a mapped
+prefix still lands where the controller said.
+
+`trans()` translates in that same domain without flashing anything — the message of a
+`createNotFoundException()`, or a string interpolated into another message, lives in the same
+catalogue, and it was usually the last reason to inject the translator:
+
+```php
+throw $this->createNotFoundException($this->trans('user.not_found'));
+```
+
+> ⚠️ **Both helpers degrade to the raw key** when `FlashTranslator` is absent from the container —
+> which is what happens to a controller instantiated with `new` in a unit test. Assert on
+> behaviour, not on the message, in those tests, or boot the container.
+
+Bulk actions
+------------
+
+`Controller\BulkActionRunner` is the data-table bulk-action pattern in one place: validate the
+CSRF token, parse `ids[]`, load every row in **one** query, check the voter row by row, and run a
+business callable on each.
+
+```php
+#[Route('/bulk-publish', methods: ['POST'])]
+#[IsGranted(PermissionCodes::CMS_PAGE_PUBLISH)]
+public function bulkPublish(Request $request, BulkActionRunner $runner): Response
+{
+    $count = $runner->run($request, Page::class, PageVoter::PUBLISH, function (Page $page): void {
+        if ($page->isPublished()) {
+            throw new \DomainException('Already published.');   // this row only
+        }
+
+        $this->pageService->publish($page);
+    });
+
+    return $this->redirectWithSuccess('cms_page_index', 'cms.page.bulk_published', ['%count%' => $count]);
+}
+```
+
+The return value is the number of rows the action actually ran on — what a flash should report.
+
+**Throw `\DomainException` to refuse one row.** It is caught per row, so a rule refusing one
+invoice does not cost the other twenty-four. Any other throwable rolls the **whole batch** back:
+a database error signals corruption that must not leave a half-persisted state. The batch runs in
+a single enveloping transaction rather than one per row.
+
+`runOnSoftDeleted()` is the restore variant: it suspends the soft-delete filter for the fetch —
+the rows would be invisible otherwise — and skips anything not actually deleted, so restoring an
+already-active row is a silent no-op. It expects the filter to be named `soft_delete`; pass a
+different name to the constructor if yours differs.
+
+> ⚠️ Keeping `#[IsGranted]` on the route is **not** optional. The per-row voter check inside the
+> runner is the second guard, not the first: without the attribute, an aggregate endpoint answers
+> to anyone logged in.
 
 Voters
 ------
