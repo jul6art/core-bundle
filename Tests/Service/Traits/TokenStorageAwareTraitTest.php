@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
+use Symfony\Component\Security\Core\Authentication\Token\SwitchUserToken;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -71,6 +72,57 @@ final class TokenStorageAwareTraitTest extends TestCase
         yield 'uuid' => ['0199a1b2-c3d4-7000-8000-000000000000', null];
         yield 'null' => [null, null];
         yield 'empty string' => ['', null];
+    }
+
+    // ── impersonation ─────────────────────────────────────────────────────
+
+    public function testAGenuineLoginHasNoOriginalUser(): void
+    {
+        self::assertNull($this->serviceWithUser(new WidgetUser(1))->getOriginalUserIdOrNull());
+    }
+
+    public function testThereIsNoOriginalUserWithoutAToken(): void
+    {
+        self::assertNull($this->serviceWithUser(null)->getOriginalUserIdOrNull());
+    }
+
+    /**
+     * Le cas qui justifie la méthode : pendant un `_switch_user`, `getCurrentUserIdOrNull()`
+     * rend le compte **usurpé**. S'arrêter là rend une piste d'audit mensongère — les deux
+     * identités doivent être lisibles.
+     */
+    public function testAnImpersonationExposesBothTheImpersonatedAndTheOriginalUser(): void
+    {
+        $service = $this->serviceWithImpersonation(impersonated: new WidgetUser(7), original: new WidgetUser(1));
+
+        self::assertSame(7, $service->getCurrentUserIdOrNull(), 'Le compte usurpé reste le compte courant.');
+        self::assertSame(1, $service->getOriginalUserIdOrNull(), "L'administrateur d'origine doit être traçable.");
+    }
+
+    public function testAnOriginalUserWithoutGetIdYieldsNoIdentifier(): void
+    {
+        $service = $this->serviceWithImpersonation(
+            impersonated: new WidgetUser(7),
+            original: new InMemoryUser('admin', null),
+        );
+
+        self::assertNull($service->getOriginalUserIdOrNull());
+    }
+
+    private function serviceWithImpersonation(UserInterface $impersonated, UserInterface $original): AwareService
+    {
+        $tokenStorage = new TokenStorage();
+        $tokenStorage->setToken(new SwitchUserToken(
+            $impersonated,
+            'main',
+            $impersonated->getRoles(),
+            new UsernamePasswordToken($original, 'main', $original->getRoles()),
+        ));
+
+        $service = new AwareService();
+        $service->setTokenStorage($tokenStorage);
+
+        return $service;
     }
 
     private function serviceWithUser(?UserInterface $user): AwareService

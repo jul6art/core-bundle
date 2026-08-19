@@ -229,6 +229,48 @@ core:
         aliases: ['app:purge']   # keeps a legacy name alive so a deployed crontab survives
 ```
 
+Service traits
+--------------
+
+Six traits in `Service\Traits` inject one cross-cutting dependency each, by **setter**
+(`#[Required]`), so a service can pick up what it needs without growing its constructor
+signature — and without every subclass having to forward the arguments.
+
+| Trait | Gives you |
+| --- | --- |
+| `EntityManagerAwareTrait` | `$this->entityManager` |
+| `EventDispatcherAwareTrait` | `$this->eventDispatcher` |
+| `FlashBagAwareTrait` | `$this->flashBag` |
+| `TranslatorAwareTrait` | `$this->translator` |
+| `FakerAwareTrait` | `$this->faker` (dev only — `composer require --dev fakerphp/faker`) |
+| `TokenStorageAwareTrait` | `$this->tokenStorage`, plus the three resolvers below |
+
+> ⚠️ **Setter injection means a service built with `new` in a unit test has no dependency.**
+> The property is typed and unassigned, so the first access throws
+> `must not be accessed before initialization` — far from the cause. Either call the setter in
+> the test, or resolve the service from the container.
+
+### Who is acting, and on whose behalf
+
+`TokenStorageAwareTrait` answers the question an audit trail, a `created_by` column or a
+per-tenant listener keeps asking:
+
+```php
+$this->getCurrentUserOrNull();      // ?UserInterface
+$this->getCurrentUserIdOrNull();    // ?int — the account the request runs as
+$this->getOriginalUserIdOrNull();   // ?int — the account that started an impersonation
+```
+
+`getCurrentUserIdOrNull()` reads `getId()` when the user class declares one — `UserInterface`
+does not, so a user without an identifier yields `null` rather than an error, and a non-numeric
+identifier (a UUID) yields `null` too.
+
+> ⚠️ **During a `_switch_user` impersonation, `getCurrentUserIdOrNull()` returns the
+> *impersonated* account.** That is usually what you want, and it is exactly what makes an
+> audit trail misleading if you stop there: the record says the user did something an
+> administrator did in their name. `getOriginalUserIdOrNull()` returns the administrator, and
+> `null` on a genuine login — record both.
+
 Entity traits
 -------------
 
