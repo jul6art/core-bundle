@@ -14,9 +14,11 @@ use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EntityListener\AbstractEntityListener;
 use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
+use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
+use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEntityListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEventListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Manager\WidgetManager;
@@ -27,6 +29,7 @@ use Jul6Art\CoreBundle\Tests\Fixtures\Service\AwareService;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\MonologBundle\MonologBundle;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
+use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\Config\Loader\LoaderInterface;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
@@ -69,6 +72,7 @@ final class TestKernel extends Kernel
         yield new FrameworkBundle();
         yield new SecurityBundle();
         yield new MonologBundle();
+        yield new TwigBundle();
         yield new CoreBundle();
 
         if ($this->withOrm) {
@@ -114,6 +118,7 @@ final class TestKernel extends Kernel
                     'doctrine.orm.default_entity_manager',
                     'event_dispatcher',
                     'request_stack',
+                    'twig',
                     'security.token_storage',
                     'security.untracked_token_storage',
                     CascadeSoftDeleteHelper::class,
@@ -121,6 +126,8 @@ final class TestKernel extends Kernel
                     EncryptedTypeRegistrar::class,
                     Encryptor::class,
                     MathCaptchaService::class,
+                    NumberFormatter::class,
+                    NumberTypeGroupingExtension::class,
                     PurgeCommand::class,
                     SecurityHeaderListener::class,
                     WidgetVoter::class,
@@ -181,6 +188,10 @@ final class TestKernel extends Kernel
         }
 
         $container->loadFromExtension('monolog', []);
+
+        // Twig is registered so the bundle's `twig.extension` tags are really consumed: a
+        // filter that exists but never reaches a template is the failure this guards against.
+        $container->loadFromExtension('twig', ['default_path' => '%kernel.project_dir%/Tests/Fixtures/views']);
 
         $container->loadFromExtension('core', $this->coreConfig);
 

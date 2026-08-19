@@ -1,0 +1,2 @@
+# TwigBundle's default_path in the test kernel points here; the directory must exist even
+# though the functional tests build their templates in memory with createTemplate().

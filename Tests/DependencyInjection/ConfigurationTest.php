@@ -29,6 +29,13 @@ final class ConfigurationTest extends TestCase
             'email_debug_from' => null,
             'email_debug_title' => 'An error occured',
             'email_debug_to' => null,
+            'number_format' => [
+                'decimal_separator' => ',',
+                'thousands_separator' => "\u{00A0}",
+                'decimals' => 2,
+            ],
+            'form' => ['number_grouping' => false],
+            'pdf' => ['public_dir' => '%kernel.project_dir%/public'],
             'security_headers' => [
                 'enabled' => false,
                 'csp_enforce' => false,

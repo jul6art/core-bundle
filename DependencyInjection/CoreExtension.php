@@ -7,9 +7,13 @@ namespace Jul6Art\CoreBundle\DependencyInjection;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
+use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
+use Jul6Art\CoreBundle\Service\NumberFormatter;
+use Jul6Art\CoreBundle\Twig\NumberExtension;
+use Jul6Art\CoreBundle\Twig\PdfAssetExtension;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Console\Command\Command;
@@ -18,7 +22,9 @@ use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Form\AbstractTypeExtension;
 use Symfony\Component\Lock\LockFactory;
+use Twig\Extension\AbstractExtension;
 
 /**
  * Class CoreExtension.
@@ -54,6 +60,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerEncryption($container, \is_string($config['encryption_key'] ?? null) ? $config['encryption_key'] : null);
         $this->registerSecurityHeaders($container, \is_array($config['security_headers'] ?? null) ? $config['security_headers'] : []);
         $this->registerCaptcha($container, \is_array($config['captcha'] ?? null) ? $config['captcha'] : []);
+        $this->registerFormatting($container, $config);
         $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
     }
 
@@ -84,6 +91,49 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             // Priority -100: run after the controllers and the other listeners have set their
             // own headers, since this one only fills the gaps.
             ->addTag('kernel.event_listener', ['event' => 'kernel.response', 'method' => 'onKernelResponse', 'priority' => -100]);
+    }
+
+    /**
+     * The formatter itself needs nothing optional; its Twig filters need Twig, and the form
+     * extension needs symfony/form *and* an explicit opt-in — it changes the rendering of every
+     * numeric field, which is not a bundle's call to make on installation.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerFormatting(ContainerBuilder $container, array $config): void
+    {
+        $numberFormat = \is_array($config['number_format'] ?? null) ? $config['number_format'] : [];
+
+        $container->register(NumberFormatter::class, NumberFormatter::class)
+            ->setArguments([
+                self::asStringOr($numberFormat['decimal_separator'] ?? null, ','),
+                self::asStringOr($numberFormat['thousands_separator'] ?? null, "\u{00A0}"),
+                \is_int($numberFormat['decimals'] ?? null) ? $numberFormat['decimals'] : 2,
+            ]);
+
+        if (class_exists(AbstractExtension::class)) {
+            $container->register(NumberExtension::class, NumberExtension::class)
+                ->setArguments([new Reference(NumberFormatter::class)])
+                ->addTag('twig.extension');
+
+            $pdf = \is_array($config['pdf'] ?? null) ? $config['pdf'] : [];
+
+            $container->register(PdfAssetExtension::class, PdfAssetExtension::class)
+                ->setArguments([self::asStringOr($pdf['public_dir'] ?? null, '%kernel.project_dir%/public')])
+                ->addTag('twig.extension');
+        }
+
+        $form = \is_array($config['form'] ?? null) ? $config['form'] : [];
+
+        if (true === ($form['number_grouping'] ?? false) && class_exists(AbstractTypeExtension::class)) {
+            $container->register(NumberTypeGroupingExtension::class, NumberTypeGroupingExtension::class)
+                ->addTag('form.type_extension');
+        }
+    }
+
+    private static function asStringOr(mixed $value, string $fallback): string
+    {
+        return \is_string($value) ? $value : $fallback;
     }
 
     /**

@@ -38,6 +38,8 @@ feature:
 | `core.email_debug` handler | `composer require symfony/monolog-bundle symfony/mailer` |
 | `Security\Encryptor`, `Doctrine\Type\EncryptedStringType` | `ext-sodium` (bundled with PHP, but a distribution can omit it) |
 | `Command\PurgeCommand` (`core:purge`) | `composer require symfony/console symfony/lock` — and `symfony/expression-language` only if a policy uses a `condition` |
+| `Twig\NumberExtension`, `Twig\PdfAssetExtension` | `composer require twig/twig` (registered only when Twig is present) |
+| `Form\Extension\NumberTypeGroupingExtension` | `composer require symfony/form` |
 
 Start server
 ------------
@@ -316,6 +318,104 @@ What the base class gives you:
 A missing subject is accepted (`supportsType('null')` is `true`), because an attribute that
 carries no entity — `CREATE`, `LIST` — is a first-class case. Guard the type inside
 `decide()` when an attribute does need its entity, as the example above does.
+
+Number formatting
+-----------------
+
+One service, so a figure looks the same in an HTML view, a PDF and a JSON payload — instead of
+each template choosing its own `number_format()` arguments.
+
+```twig
+{{ invoice.total|format_number }}        {# 1 234,56 #}
+{{ invoice.total|format_number(0) }}     {# 1 235 #}
+{{ invoice.total|format_money('EUR') }}  {# 1 234,56 EUR #}
+{{ line.vatRate|format_percent }}        {# 20 % #}
+```
+
+```php
+public function __construct(private readonly NumberFormatter $formatter) {}
+// …
+$this->formatter->formatMoney($invoice->getTotal(), 'EUR');
+```
+
+```yaml
+core:
+    number_format:
+        decimal_separator: ','
+        thousands_separator: ~     # default: a non-breaking space
+        decimals: 2
+```
+
+The defaults follow the French / Luxembourg convention. The thousands separator is a
+**non-breaking space** on purpose: a regular one lets a PDF renderer wrap a number across two
+lines. The percent sign is glued the same way.
+
+Nothing to format returns an **empty string**, never a `0` or a dash — so the template decides:
+`{{ value|format_number ?: '—' }}`.
+
+> The filters are also registered as `fr_number`, `fr_money` and `fr_percent`. Those are
+> historical names kept for existing templates; use the neutral ones in new code.
+
+PDF assets
+----------
+
+`asset()` returns an HTTP URL relative to the current request. dompdf does not fetch remote
+URLs in production and has no base to resolve a schemeless relative one — so the image
+**silently never loads**. These two helpers are the way around it.
+
+```twig
+{# filesystem path, when dompdf may read the directory #}
+<img src="{{ pdf_image_path(organization.logoPath) }}">
+
+{# base64 data: URI, which no chroot or isRemoteEnabled setting can block #}
+<img src="{{ pdf_image_data_uri(organization.logoPath) }}">
+```
+
+```yaml
+core:
+    pdf:
+        public_dir: '%kernel.project_dir%/public'
+```
+
+Prefer the data URI for small images — logos, headers — at the cost of roughly a third more
+HTML weight; prefer the path when a filesystem location is what is wanted. Both return `null`
+on an empty input, so a template keeps its `{% if %}` unchanged.
+
+> ⚠️ `pdf_image_data_uri()` refuses a file under 100 bytes. A truncated upload would otherwise
+> produce a well-formed URI that dompdf renders as a **white square** — worse than no image,
+> because nothing signals the failure.
+
+Form bricks
+-----------
+
+**`Form\Transformer\StripWhitespaceTransformer`** reconciles an input mask with a fixed-length
+column. A mask like `000 000 000 00000` (SIRET) posts the spaces it drew, and `Assert\Length`
+then rejects the value for being too long:
+
+```php
+$builder->get('siret')->addModelTransformer(new StripWhitespaceTransformer(digitsOnly: true));
+$builder->get('iban')->addModelTransformer(new StripWhitespaceTransformer());
+```
+
+`digitsOnly` drops everything that is not a digit; the default drops whitespace only, so an
+IBAN keeps its letters. The displayed value is left untouched — the mask redraws itself on
+connect. An emptied field reaches the entity as `null`, not `''`, so a nullable column does not
+end up storing an empty string no `Assert\NotBlank` would catch.
+
+**`Form\Extension\NumberTypeGroupingExtension`** turns on thousands grouping for every
+`NumberType` at once, so a quantity renders as `1 234,56` rather than `1234.56`:
+
+```yaml
+core:
+    form:
+        number_grouping: true
+```
+
+> ⚠️ **Opt-in, and deliberately so**: it changes how every numeric field of the application
+> looks, which is not a decision a bundle should make on installation. Submission stays
+> backward compatible — `NumberToLocalizedStringTransformer` parses a grouped value as readily
+> as an ungrouped one — and a single field can still opt out with `'grouping' => false`, for a
+> numeric identifier that must not be grouped.
 
 Utilities
 ---------
