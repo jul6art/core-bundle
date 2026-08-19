@@ -90,6 +90,54 @@ final class StringsTest extends TestCase
      * and into DQL, so it is a contract, not an implementation detail. Read through
      * reflection because a direct comparison is a tautology the analyser rejects.
      */
+    // ── marqueur de suppression douce ─────────────────────────────────────
+
+    public function testMarkDeletedAppendsTheMarkerAndATimestamp(): void
+    {
+        $marked = Strings::markDeleted('ada@example.test');
+
+        self::assertMatchesRegularExpression('/^ada@example\.test_DELETED_\d+$/', $marked);
+    }
+
+    public function testMarkDeletedIsIdempotent(): void
+    {
+        $once = Strings::markDeleted('ada@example.test');
+
+        self::assertSame($once, Strings::markDeleted($once));
+    }
+
+    public function testRestoreDeletedGivesBackTheOriginalValue(): void
+    {
+        self::assertSame('ada@example.test', Strings::restoreDeleted('ada@example.test_DELETED_1755000000'));
+    }
+
+    public function testRestoreDeletedLeavesAnUnmarkedValueAndNullAlone(): void
+    {
+        self::assertSame('ada@example.test', Strings::restoreDeleted('ada@example.test'));
+        self::assertNull(Strings::restoreDeleted(null));
+    }
+
+    /**
+     * Seul un marqueur **final** suivi de chiffres est retiré : une valeur qui le contient au
+     * milieu n'est pas tronquée, sinon restaurer une adresse la mutilerait.
+     */
+    public function testRestoreDeletedOnlyStripsATrailingMarker(): void
+    {
+        self::assertSame(
+            'ada_DELETED_42@example.test',
+            Strings::restoreDeleted('ada_DELETED_42@example.test'),
+        );
+    }
+
+    /**
+     * L'aller-retour complet, tel que les services l'enchaînent : marquer avant la suppression
+     * douce, restaurer au rétablissement.
+     */
+    public function testTheRoundTripReturnsTheStartingValue(): void
+    {
+        self::assertSame('SKU-001', Strings::restoreDeleted(Strings::markDeleted('SKU-001')));
+    }
+
     public function testTheSoftDeleteMarkerIsPublished(): void
     {
         self::assertSame('_DELETED_', new \ReflectionClassConstant(Strings::class, 'DELETED_SUFFIX')->getValue());

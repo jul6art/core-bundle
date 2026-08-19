@@ -229,10 +229,106 @@ core:
         aliases: ['app:purge']   # keeps a legacy name alive so a deployed crontab survives
 ```
 
-Soft delete
------------
+Entity traits
+-------------
 
-Three independent bricks, all opt-in from the application side:
+Five traits in `Entity\Traits`, each mapping its own columns. Nothing to configure — using one
+is the whole installation.
+
+| Trait | Columns | What sets them |
+| --- | --- | --- |
+| `IdTrait` | `id` (`IDENTITY`) | the database |
+| `TimestampableTrait` | `created_at`, `updated_at` | `#[ORM\PrePersist]` / `#[ORM\PreUpdate]` |
+| `CreatedAtTrait` | `created_at` | `#[ORM\PrePersist]` |
+| `SoftDeletableTrait` | `deleted_at` | an explicit `softDelete()` call |
+| `AuditableTrait` | `created_by`, `updated_by` | **your code**, through the setters |
+
+```php
+#[ORM\Entity]
+#[ORM\HasLifecycleCallbacks]
+class Page
+{
+    use IdTrait;
+    use SoftDeletableTrait;
+    use TimestampableTrait;
+}
+```
+
+> ⚠️ **`#[ORM\HasLifecycleCallbacks]` on the entity is not optional** for the two timestamp
+> traits. Doctrine ignores `#[ORM\PrePersist]` / `#[ORM\PreUpdate]` without it, and says nothing:
+> the columns are created and never filled, so the failure surfaces later as a `NOT NULL`
+> violation on insert — a message that mentions neither the trait nor the missing attribute.
+> `SoftDeletableTrait` and `AuditableTrait` need no callback, hence no attribute.
+
+Three things worth knowing before you pick:
+
+- **`TimestampableTrait` and `CreatedAtTrait` are mutually exclusive.** Both declare `$createdAt`
+  and `onPrePersist()`, so a class using both is a fatal error, not a merge. Choose
+  `CreatedAtTrait` when an audit log already records who changed what and when: `updated_at` and
+  `updated_by` columns nobody populates stay NULL forever, and a NULL `updated_at` reads as
+  "never modified".
+- **No setter for the timestamps, on purpose**, and `created_at` is mapped `updatable: false` so
+  even a reflected rewrite never reaches an `UPDATE`. A fixture that needs a back-dated row uses
+  reflection deliberately.
+- **`AuditableTrait` populates nothing by itself.** A trait that guessed the current user would
+  need the security context inside an entity. Call `setCreatedBy()` / `setUpdatedBy()` from the
+  service that owns the write, and store something a human can read in a listing — an email, not
+  a numeric id.
+
+### Soft delete and UNIQUE columns
+
+A soft-deleted row keeps its values, so a UNIQUE column blocks the next row that wants the same
+one: a user deleted and re-created with the same email fails to insert. The trait carries the two
+helpers that free the value and give it back:
+
+```php
+$user->setEmail(Strings::markDeleted($user->getEmail()));   // ada@x.test_DELETED_1755…
+$user->softDelete();
+// …later
+$user->setEmail((string) Strings::restoreDeleted($user->getEmail()));   // ada@x.test
+$user->restore();
+```
+
+Both are idempotent: marking an already-marked value returns it unchanged, restoring a value with
+no suffix returns it as it is, and only a **trailing** marker followed by digits is stripped.
+
+They live in `Util\Strings`, next to the `DELETED_SUFFIX` constant that defines the convention,
+and **not** on the trait. Two reasons: they are string operations rather than entity behaviour,
+and PHP 8.5 deprecates calling a static trait method on the trait itself — a rule that nothing
+enforces at a call site.
+
+**The trait only stores a date.** Hiding the row is the application's job — register
+`Doctrine\SoftDeleteFilter` (below) so Doctrine excludes soft-deleted rows from every query, and
+use `Service\CascadeSoftDeleteHelper` to carry the deletion down to children. Without one of the
+two, a soft-deleted row keeps showing up.
+
+### Serialization groups do not belong in a trait
+
+An attribute cannot vary from one entity to the next, so a trait carrying `#[Groups]` ends up
+holding the **union** of every consumer's groups — and has to be edited each time a new resource
+is exposed, which is exactly what a bundle cannot accept. None of these traits declares one.
+Declare them per class instead, in `config/serializer/` (loaded by convention as soon as the
+directory exists):
+
+```yaml
+# config/serializer/timestampable.yaml
+App\Entity\Page:
+    attributes:
+        createdAt:
+            groups: ['page:read']
+        deletedAt:
+            groups: ['page:read']
+```
+
+> ⚠️ `deletedAt` is usually what a data table needs to grey a row out and to decide whether it
+> offers restore or delete. Forgetting its group is a visible bug, and a silent one: the property
+> simply disappears from the response.
+
+Doctrine filters and query helpers
+----------------------------------
+
+Three independent bricks, all opt-in from the application side. The first two are what actually
+hide a row that `SoftDeletableTrait` has marked:
 
 ```yaml
 # config/packages/doctrine.yaml

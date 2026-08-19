@@ -18,11 +18,50 @@ final class Strings
      * Marker appended to a UNIQUE column value when its row is soft-deleted, so the
      * original value becomes available again.
      *
-     * Published as a constant because three places need to agree on it: the soft-delete
-     * entity trait, the cascade helper's DQL, and {@see self::lowerEmail()} — which has to
-     * leave it alone while lowercasing everything around it.
+     * Published as a constant because four places need to agree on it: {@see self::markDeleted()}
+     * and {@see self::restoreDeleted()}, the cascade helper's DQL, and {@see self::lowerEmail()} —
+     * which has to leave it alone while lowercasing everything around it.
      */
     public const string DELETED_SUFFIX = '_DELETED_';
+
+    /**
+     * Frees a UNIQUE column value that a soft delete would otherwise keep locked: appends
+     * {@see self::DELETED_SUFFIX} plus a timestamp, so the original value can be used again by
+     * the next row. Idempotent — an already-marked value comes back unchanged.
+     *
+     * ```php
+     * $user->setEmail(Strings::markDeleted($user->getEmail()));   // ada@x.test_DELETED_1755…
+     * $user->softDelete();
+     * ```
+     *
+     * These two live here rather than on `Entity\Traits\SoftDeletableTrait`, where they used to
+     * sit, for a concrete reason: PHP 8.5 deprecates calling a static trait method on the trait
+     * itself, and remembering to write `User::markDeleted(…)` instead of
+     * `SoftDeletableTrait::markDeleted(…)` is a rule nothing enforces. They are string operations
+     * on a convention, not entity behaviour, and the convention is defined right above.
+     */
+    public static function markDeleted(string $value): string
+    {
+        if (str_contains($value, self::DELETED_SUFFIX)) {
+            return $value;
+        }
+
+        return $value.self::DELETED_SUFFIX.time();
+    }
+
+    /**
+     * Gives back the value {@see self::markDeleted()} suffixed. A value carrying no marker, and
+     * `null`, come back unchanged — and only a **trailing** marker followed by digits is
+     * stripped, so an address that happens to contain the marker mid-string survives.
+     */
+    public static function restoreDeleted(?string $value): ?string
+    {
+        if (null === $value) {
+            return null;
+        }
+
+        return preg_replace(\sprintf('/%s\d+$/', preg_quote(self::DELETED_SUFFIX, '/')), '', $value);
+    }
 
     /**
      * Trim + uppercase. Returns the input unchanged when null/empty.
