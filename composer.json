@@ -46,6 +46,7 @@
         "symfony/var-dumper": "^7.4 || ^8.0"
     },
     "suggest": {
+        "ext-sodium": "Required by Security\\Encryptor and the encrypted_string DBAL type (core.encryption_key)",
         "fakerphp/faker": "Required by the FakerAwareTrait (data fixtures)",
         "symfony/mailer": "Required by the email_debug handler (Monolog symfony_mailer type)",
         "symfony/monolog-bundle": "To enable the prod logging and the email_debug handlers configured by this bundle"

@@ -6,6 +6,7 @@ parameters:
     paths:
         - CoreBundle.php
         - DependencyInjection
+        - Doctrine
         - Entity
         - EntityListener
         - Event
@@ -13,7 +14,9 @@ parameters:
         - Factory
         - Manager
         - Repository
+        - Security
         - Service
         - Tests
+        - Util
         - rector.php
     treatPhpDocTypesAsCertain: false

@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
+use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
+use Jul6Art\CoreBundle\Security\Encryptor;
+use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\DependencyInjection\Reference;
 
 /**
  * Class CoreExtension.
@@ -20,6 +24,10 @@ use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
  *     email_debug_title: string|null,
  *     email_debug_to: string|null,
  * }
+ *
+ * `encryption_key` is intentionally absent from CoreConfig: prepend() turns every key of
+ * that shape into a container parameter, and the key must never be exposed that way. It is
+ * read in load() only.
  */
 class CoreExtension extends Extension implements PrependExtensionInterface
 {
@@ -32,6 +40,54 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         );
 
         $loader->load('services.yaml');
+
+        // Deliberately the *unprocessed* configuration: an `%env(...)%` placeholder must
+        // reach the service argument untouched so the secret is read at runtime instead of
+        // being baked into the compiled container.
+        $config = $this->processConfiguration(new Configuration(), $configs);
+
+        $this->registerEncryption($container, \is_string($config['encryption_key'] ?? null) ? $config['encryption_key'] : null);
+        $this->registerDoctrineServices($container);
+    }
+
+    /**
+     * The encryption bricks are opt-in: without a key there is nothing to register, and
+     * registering them anyway would make every application boot fail on a missing env var
+     * just because the bundle is installed.
+     */
+    private function registerEncryption(ContainerBuilder $container, ?string $encryptionKey): void
+    {
+        if (null === $encryptionKey || '' === $encryptionKey) {
+            return;
+        }
+
+        $container->register(Encryptor::class, Encryptor::class)
+            ->setArguments([$encryptionKey]);
+
+        // String event names on purpose: referencing ConsoleEvents::COMMAND would make the
+        // listener unloadable in an application without symfony/console, which this bundle
+        // does not require.
+        $container->register(EncryptedTypeRegistrar::class, EncryptedTypeRegistrar::class)
+            ->setArguments([new Reference(Encryptor::class)])
+            ->addTag('kernel.event_listener', ['event' => 'kernel.request', 'method' => 'register', 'priority' => 4096])
+            ->addTag('kernel.event_listener', ['event' => 'console.command', 'method' => 'register', 'priority' => 4096]);
+    }
+
+    /**
+     * Registered only when DoctrineBundle is enabled: `doctrine.orm.entity_manager` does
+     * not exist otherwise, and an unresolvable reference would break the container of every
+     * application that installs this bundle without the ORM.
+     */
+    private function registerDoctrineServices(ContainerBuilder $container): void
+    {
+        $bundles = $container->getParameter('kernel.bundles');
+
+        if (!\is_array($bundles) || !isset($bundles['DoctrineBundle'])) {
+            return;
+        }
+
+        $container->register(CascadeSoftDeleteHelper::class, CascadeSoftDeleteHelper::class)
+            ->setArguments([new Reference('doctrine.orm.entity_manager')]);
     }
 
     #[\Override]

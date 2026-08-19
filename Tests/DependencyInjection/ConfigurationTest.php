@@ -28,6 +28,7 @@ final class ConfigurationTest extends TestCase
             'email_debug_from' => null,
             'email_debug_title' => 'An error occured',
             'email_debug_to' => null,
+            'encryption_key' => null,
         ], $this->process([]));
     }
 
@@ -44,6 +45,16 @@ final class ConfigurationTest extends TestCase
         self::assertSame('from@example.com', $config['email_debug_from']);
         self::assertSame('Boom', $config['email_debug_title']);
         self::assertSame('to@example.com', $config['email_debug_to']);
+    }
+
+    /**
+     * The key must survive processing verbatim: the extension passes it straight to the
+     * service argument so an `%env(...)%` placeholder is resolved at runtime, not baked
+     * into the compiled container.
+     */
+    public function testTheEncryptionKeyIsKeptVerbatim(): void
+    {
+        self::assertSame('%env(APP_ENCRYPTION_KEY)%', $this->process([['encryption_key' => '%env(APP_ENCRYPTION_KEY)%']])['encryption_key']);
     }
 
     public function testLaterConfigsOverrideEarlierOnes(): void

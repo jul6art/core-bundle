@@ -6,8 +6,14 @@ namespace Jul6Art\CoreBundle\Tests\Fixtures;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Jul6Art\CoreBundle\CoreBundle;
+use Jul6Art\CoreBundle\Doctrine\DQL\JsonTextFunction;
+use Jul6Art\CoreBundle\Doctrine\SoftDeleteFilter;
+use Jul6Art\CoreBundle\Doctrine\Type\EncryptedStringType;
+use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EntityListener\AbstractEntityListener;
 use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
+use Jul6Art\CoreBundle\Security\Encryptor;
+use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEntityListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEventListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Manager\WidgetManager;
@@ -101,8 +107,12 @@ final class TestKernel extends Kernel
                 $exposed = [
                     'core.monolog.html_formatter',
                     'doctrine.orm.default_entity_manager',
+                    'event_dispatcher',
                     'security.token_storage',
                     'security.untracked_token_storage',
+                    CascadeSoftDeleteHelper::class,
+                    EncryptedTypeRegistrar::class,
+                    Encryptor::class,
                 ];
 
                 foreach ($container->getDefinitions() as $id => $definition) {
@@ -166,10 +176,15 @@ final class TestKernel extends Kernel
             return;
         }
 
+        // The DBAL type, the DQL function and the SQL filter are registered exactly the way
+        // a consuming application registers them — that is what the functional tests assert.
         $container->loadFromExtension('doctrine', [
             'dbal' => [
                 'driver' => 'pdo_sqlite',
                 'memory' => true,
+                'types' => [
+                    EncryptedStringType::NAME => EncryptedStringType::class,
+                ],
             ],
             'orm' => [
                 'controller_resolver' => ['auto_mapping' => false],
@@ -179,6 +194,17 @@ final class TestKernel extends Kernel
                         'dir' => __DIR__.'/Entity',
                         'prefix' => 'Jul6Art\CoreBundle\Tests\Fixtures\Entity',
                         'is_bundle' => false,
+                    ],
+                ],
+                'dql' => [
+                    'string_functions' => [
+                        'JSON_TEXT' => JsonTextFunction::class,
+                    ],
+                ],
+                'filters' => [
+                    'soft_delete' => [
+                        'class' => SoftDeleteFilter::class,
+                        'enabled' => false,
                     ],
                 ],
             ],

@@ -35,6 +35,10 @@ class Configuration implements ConfigurationInterface
                     ->info('Recipient address. Required when email_debug is enabled.')
                     ->defaultNull()
                 ->end()
+                ->scalarNode('encryption_key')
+                    ->info('Base64-encoded 32-byte key. Setting it registers Security\\Encryptor and the listener that feeds the encrypted_string DBAL type. Point it at an env var; never commit it.')
+                    ->defaultNull()
+                ->end()
             ->end();
 
         return $treeBuilder;

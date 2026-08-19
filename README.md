@@ -36,6 +36,7 @@ feature:
 | --- | --- |
 | `Service\Traits\FakerAwareTrait` (data fixtures) | `composer require --dev fakerphp/faker` |
 | `core.email_debug` handler | `composer require symfony/monolog-bundle symfony/mailer` |
+| `Security\Encryptor`, `Doctrine\Type\EncryptedStringType` | `ext-sodium` (bundled with PHP, but a distribution can omit it) |
 
 Start server
 ------------
@@ -58,10 +59,83 @@ core:
     email_debug_from: ~
     email_debug_title: 'An error occured'
     email_debug_to: ~
+    encryption_key: ~
 ```
 
-Each option is also exposed as a container parameter, prefixed with `core.`
-(`core.email_debug`, `core.email_debug_from`, ...).
+The `email_debug*` options are also exposed as container parameters, prefixed with
+`core.` (`core.email_debug`, `core.email_debug_from`, ...). **`encryption_key` is
+deliberately not**, so the secret never ends up in the compiled container.
+
+Data at rest
+------------
+
+Setting `core.encryption_key` to a base64-encoded 32-byte key registers
+`Security\Encryptor` (libsodium XSalsa20-Poly1305 secretbox) and the listener that
+feeds it to the `encrypted_string` DBAL type. Leave the key unset and nothing is
+registered — an application that encrypts nothing carries no dead service.
+
+```yaml
+# config/packages/core.yaml
+core:
+    encryption_key: '%env(APP_ENCRYPTION_KEY)%'   # never commit the value
+
+# config/packages/doctrine.yaml
+doctrine:
+    dbal:
+        types:
+            encrypted_string: Jul6Art\CoreBundle\Doctrine\Type\EncryptedStringType
+```
+
+```php
+#[ORM\Column(type: 'encrypted_string', nullable: true)]
+private ?string $iban = null;
+```
+
+The ORM only ever sees the plaintext, so forms, validation and change tracking keep
+working; the ciphertext exists only in the database. Each write uses a fresh nonce, so
+the same plaintext never produces the same ciphertext twice, and decryption
+authenticates the payload. Pass the key as an env var: it is read at runtime, not baked
+into the container.
+
+Soft delete
+-----------
+
+Three independent bricks, all opt-in from the application side:
+
+```yaml
+# config/packages/doctrine.yaml
+doctrine:
+    orm:
+        filters:
+            soft_delete:
+                class: Jul6Art\CoreBundle\Doctrine\SoftDeleteFilter
+                enabled: true
+        dql:
+            string_functions:
+                JSON_TEXT: Jul6Art\CoreBundle\Doctrine\DQL\JsonTextFunction
+```
+
+- **`Doctrine\SoftDeleteFilter`** adds `AND <deletedAt column> IS NULL` to every query on
+  an entity declaring a `deletedAt` field, and leaves the others alone. The column name
+  comes from the mapping, so both naming strategies work.
+- **`Service\CascadeSoftDeleteHelper`** (registered automatically when DoctrineBundle is
+  enabled) carries the DQL UPDATE patterns for propagating a soft delete to children:
+  `cascadeSoftDelete()`, `nullifyForeignKey()`, `cascadeRestore()`, plus
+  `bulkMarkDeletedColumn()` / `bulkRestoreDeletedColumn()` to free UNIQUE columns by
+  appending `Util\Strings::DELETED_SUFFIX`.
+- **`Doctrine\DQL\JsonTextFunction`** exposes `JSON_TEXT(field)`, casting a JSON column
+  to text so a portable `LIKE` can search it (`field::text` on PostgreSQL,
+  `CAST(field AS CHAR)` elsewhere).
+
+Utilities
+---------
+
+- **`Util\Strings`** — UTF-8-safe `upper()` / `lower()` normalisation for entity setters,
+  plus `lowerEmail()` / `lowerHost()` which lowercase everything *except* a trailing
+  `_DELETED_<timestamp>` soft-delete marker.
+- **`Event\PersistenceAbortedException`** — thrown by `EntityListener\AbstractEntityListener`
+  when a subscriber aborts a `BEFORE_*` event, so the refused write never reaches the
+  database.
 
 Quality assurance
 -----------------
