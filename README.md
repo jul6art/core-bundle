@@ -443,6 +443,6 @@ composer rector       # Rector, writes the fixes
 License
 -------
 
-The Symfony Skeleton Generator is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+The Core Bundle is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 
 &copy; 2026 [jul6art](https://devinthehood.com)
