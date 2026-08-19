@@ -68,7 +68,7 @@ trait TokenStorageAwareTrait
 
         $original = $token->getOriginalToken()->getUser();
 
-        if (null === $original || !method_exists($original, 'getId')) {
+        if (!$original instanceof UserInterface || !method_exists($original, 'getId')) {
             return null;
         }
 
