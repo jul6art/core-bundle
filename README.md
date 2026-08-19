@@ -127,6 +127,69 @@ doctrine:
   to text so a portable `LIKE` can search it (`field::text` on PostgreSQL,
   `CAST(field AS CHAR)` elsewhere).
 
+Voters
+------
+
+`Security\Voter\AbstractVoter` reduces a voter to its business rules. A concrete voter
+states three things — the attributes it carries, the subject types it applies to, how it
+decides — and the base class handles the rest: Symfony's two caching hooks, the
+anonymous-visitor guard, and the role lookup.
+
+```php
+use Jul6Art\CoreBundle\Security\Voter\AbstractVoter;
+use Symfony\Component\Security\Core\User\UserInterface;
+
+final class GalleryVoter extends AbstractVoter
+{
+    public const string VIEW = 'GALLERY_VIEW';
+    public const string EDIT = 'GALLERY_EDIT';
+
+    protected function attributes(): array
+    {
+        return [self::VIEW, self::EDIT];
+    }
+
+    protected function subjects(): array
+    {
+        return [Gallery::class];
+    }
+
+    protected function decide(string $attribute, mixed $subject, UserInterface $user): bool
+    {
+        if (!$subject instanceof Gallery) {
+            return false;
+        }
+
+        return match ($attribute) {
+            self::VIEW => $subject->isPublished() || $this->owns($subject, $user),
+            self::EDIT => $this->owns($subject, $user) || $this->hasRole('ROLE_ADMIN'),
+            default => false,
+        };
+    }
+}
+```
+
+What the base class gives you:
+
+| Member | Role |
+|---|---|
+| `attributes()` | *abstract* — the attributes carried, listed explicitly. Feeds `supportsAttribute()`, which Symfony **caches**: the voter is never called again for an attribute it does not carry. |
+| `subjects()` | *abstract* — the subject types. Feeds `supportsType()`, **cached** on the type name. Return `[]` when the decision rests on no entity (a dashboard, a global listing). |
+| `decide()` | *abstract* — the rules, with a guaranteed non-anonymous `$user`. |
+| `supportsSubject()` | Instance-level counterpart of `supportsType()`; override it when the rule is finer than a type. |
+| `hasRole()` | Role of the signed-in account, **inheritance included**. |
+| `setSecurity()` | `#[Required]` setter, so a concrete voter keeps its constructor for its own dependencies. |
+
+> `hasRole()` goes through `Security::isGranted()` on purpose. `$token->getRoleNames()`
+> returns only the roles actually **stored**, so an account holding `ROLE_ADMIN` and granted
+> `ROLE_EDITOR` through `role_hierarchy` fails a raw check and passes this one. If you are
+> replacing hand-written role checks, expect verdicts to change wherever a role was
+> inherited rather than stored.
+
+A missing subject is accepted (`supportsType('null')` is `true`), because an attribute that
+carries no entity — `CREATE`, `LIST` — is a first-class case. Guard the type inside
+`decide()` when an attribute does need its entity, as the example above does.
+
 Utilities
 ---------
 

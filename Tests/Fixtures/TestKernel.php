@@ -18,6 +18,8 @@ use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEntityListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEventListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Manager\WidgetManager;
 use Jul6Art\CoreBundle\Tests\Fixtures\Repository\WidgetRepository;
+use Jul6Art\CoreBundle\Tests\Fixtures\Security\DashboardVoter;
+use Jul6Art\CoreBundle\Tests\Fixtures\Security\WidgetVoter;
 use Jul6Art\CoreBundle\Tests\Fixtures\Service\AwareService;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\MonologBundle\MonologBundle;
@@ -111,8 +113,12 @@ final class TestKernel extends Kernel
                     'security.token_storage',
                     'security.untracked_token_storage',
                     CascadeSoftDeleteHelper::class,
+                    DashboardVoter::class,
                     EncryptedTypeRegistrar::class,
                     Encryptor::class,
+                    WidgetVoter::class,
+                    'security.authorization_checker',
+                    'security.helper',
                 ];
 
                 foreach ($container->getDefinitions() as $id => $definition) {
@@ -147,10 +153,22 @@ final class TestKernel extends Kernel
             'mailer' => ['dsn' => 'null://null'],
         ]);
 
+        // A real hierarchy, because that is exactly what AbstractVoter::hasRole() must honour
+        // and what $token->getRoleNames() would miss.
         $container->loadFromExtension('security', [
             'providers' => ['in_memory' => ['memory' => null]],
             'firewalls' => ['main' => ['security' => false]],
+            'role_hierarchy' => ['ROLE_ADMIN' => ['ROLE_EDITOR'], 'ROLE_EDITOR' => ['ROLE_USER']],
         ]);
+
+        // Autowired so the #[Required] setter of AbstractVoter is really exercised: a voter
+        // whose Security helper is not injected would fail on an uninitialised property.
+        foreach ([WidgetVoter::class, DashboardVoter::class] as $voter) {
+            $container->register($voter, $voter)
+                ->setAutowired(true)
+                ->setAutoconfigured(true)
+                ->setPublic(true);
+        }
 
         $container->loadFromExtension('monolog', []);
 
