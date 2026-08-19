@@ -37,6 +37,7 @@ feature:
 | `Service\Traits\FakerAwareTrait` (data fixtures) | `composer require --dev fakerphp/faker` |
 | `core.email_debug` handler | `composer require symfony/monolog-bundle symfony/mailer` |
 | `Security\Encryptor`, `Doctrine\Type\EncryptedStringType` | `ext-sodium` (bundled with PHP, but a distribution can omit it) |
+| `Command\PurgeCommand` (`core:purge`) | `composer require symfony/console symfony/lock` — and `symfony/expression-language` only if a policy uses a `condition` |
 
 Start server
 ------------
@@ -96,6 +97,56 @@ working; the ciphertext exists only in the database. Each write uses a fresh non
 the same plaintext never produces the same ciphertext twice, and decryption
 authenticates the payload. Pass the key as an env var: it is read at runtime, not baked
 into the container.
+
+Retention
+---------
+
+Annotate an entity with `Attribute\Purgeable` and `core:purge` removes the rows whose
+retention has expired. The attribute is repeatable, because one entity often needs two
+delays:
+
+```php
+use Jul6Art\CoreBundle\Attribute\Purgeable;
+
+#[Purgeable(field: 'createdAt', interval: '-3 months')]
+#[Purgeable(field: 'deletedAt', interval: '-1 week', condition: 'entity.isDeleted()')]
+class AuditLog { … }
+```
+
+```shell
+bin/console core:purge --dry-run          # says what it would remove, removes nothing
+bin/console core:purge --entity=AuditLog  # one entity only
+bin/console core:purge
+```
+
+**Measure before you commit to an interval.** `--dry-run` reports the row count, and a
+policy that looks reasonable can turn out to delete most of a table on its first run.
+
+The command exists only when `symfony/console` and `symfony/lock` are both installed, and
+`framework.lock` is configured — no lock means no command rather than an unguarded one, since
+two concurrent purges would race on the same rows. A prevented concurrent run exits
+`SUCCESS`: a scheduler should not page anyone for a guard working as intended.
+
+**It writes no journal of its own.** One `Event\EntityPurgedEvent` is dispatched per removed
+row, after the flush, carrying scalars only — by then the entity is detached. Subscribe to it
+to record whatever your application needs:
+
+```php
+#[AsEventListener(event: EntityPurgedEvent::NAME)]
+public function onEntityPurged(EntityPurgedEvent $event): void
+{
+    $this->auditLogger->log('entity.purged', $event->getOrganizationId(), null,
+        $event->getEntityShortName(), $event->getEntityId());
+}
+```
+
+```yaml
+# config/packages/core.yaml
+core:
+    purge:
+        batch_size: 100          # rows flushed at a time; lower it for heavy entities
+        aliases: ['app:purge']   # keeps a legacy name alive so a deployed crontab survives
+```
 
 Soft delete
 -----------

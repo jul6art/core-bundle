@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Tests\Fixtures;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\CoreBundle;
 use Jul6Art\CoreBundle\Doctrine\DQL\JsonTextFunction;
 use Jul6Art\CoreBundle\Doctrine\SoftDeleteFilter;
@@ -116,7 +117,9 @@ final class TestKernel extends Kernel
                     DashboardVoter::class,
                     EncryptedTypeRegistrar::class,
                     Encryptor::class,
+                    PurgeCommand::class,
                     WidgetVoter::class,
+                    'lock.factory',
                     'security.authorization_checker',
                     'security.helper',
                 ];
@@ -151,6 +154,8 @@ final class TestKernel extends Kernel
             'translator' => ['default_path' => '%kernel.project_dir%/translations'],
             'session' => ['storage_factory_id' => 'session.storage.factory.mock_file'],
             'mailer' => ['dsn' => 'null://null'],
+            // flock store: the purge command's concurrency guard needs a real lock factory.
+            'lock' => true,
         ]);
 
         // A real hierarchy, because that is exactly what AbstractVoter::hasRole() must honour

@@ -4,16 +4,19 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
+use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Lock\LockFactory;
 
 /**
  * Class CoreExtension.
@@ -47,7 +50,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $config = $this->processConfiguration(new Configuration(), $configs);
 
         $this->registerEncryption($container, \is_string($config['encryption_key'] ?? null) ? $config['encryption_key'] : null);
-        $this->registerDoctrineServices($container);
+        $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
     }
 
     /**
@@ -78,7 +81,37 @@ class CoreExtension extends Extension implements PrependExtensionInterface
      * not exist otherwise, and an unresolvable reference would break the container of every
      * application that installs this bundle without the ORM.
      */
-    private function registerDoctrineServices(ContainerBuilder $container): void
+    /**
+     * Reads the only purge setting the container needs, so the raw config array never has to
+     * travel further than this class.
+     *
+     * @param array<mixed> $config
+     */
+    private static function purgeBatchSize(array $config): int
+    {
+        $purge = $config['purge'] ?? null;
+        $batchSize = \is_array($purge) ? ($purge['batch_size'] ?? null) : null;
+
+        return \is_int($batchSize) && $batchSize > 0 ? $batchSize : 100;
+    }
+
+    /**
+     * @param array<mixed> $config
+     *
+     * @return list<string>
+     */
+    private static function purgeAliases(array $config): array
+    {
+        $purge = $config['purge'] ?? null;
+        $aliases = \is_array($purge) ? ($purge['aliases'] ?? []) : [];
+
+        return \is_array($aliases) ? array_values(array_filter($aliases, \is_string(...))) : [];
+    }
+
+    /**
+     * @param list<string> $purgeAliases
+     */
+    private function registerDoctrineServices(ContainerBuilder $container, int $purgeBatchSize, array $purgeAliases): void
     {
         $bundles = $container->getParameter('kernel.bundles');
 
@@ -88,6 +121,35 @@ class CoreExtension extends Extension implements PrependExtensionInterface
 
         $container->register(CascadeSoftDeleteHelper::class, CascadeSoftDeleteHelper::class)
             ->setArguments([new Reference('doctrine.orm.entity_manager')]);
+
+        $this->registerPurgeCommand($container, $purgeBatchSize, $purgeAliases);
+    }
+
+    /**
+     * The purge needs symfony/console for the command itself and symfony/lock for the guard
+     * that stops two runs racing on the same rows. Both are suggestions, not requirements, so
+     * the command only exists when they do — and {@see PurgeCommandPass} drops it again if the
+     * lock package is installed but `framework.lock` was never configured.
+     *
+     * @param list<string> $aliases
+     */
+    private function registerPurgeCommand(ContainerBuilder $container, int $batchSize, array $aliases): void
+    {
+        if (!class_exists(Command::class) || !class_exists(LockFactory::class)) {
+            return;
+        }
+
+        // Aliases travel in the tag value, pipe-separated, the way #[AsCommand(name: 'a|b')]
+        // expresses them: a lazily-registered command is never instantiated at compile time,
+        // so a setAliases() call would come too late for the console to know the extra names.
+        $container->register(PurgeCommand::class, PurgeCommand::class)
+            ->setArguments([
+                new Reference('doctrine.orm.entity_manager'),
+                new Reference('lock.factory'),
+                new Reference('event_dispatcher'),
+                $batchSize,
+            ])
+            ->addTag('console.command', ['command' => implode('|', ['core:purge', ...$aliases])]);
     }
 
     #[\Override]

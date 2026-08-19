@@ -8,6 +8,7 @@ use Jul6Art\CoreBundle\DependencyInjection\Configuration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Exception\InvalidTypeException;
 use Symfony\Component\Config\Definition\Processor;
 
@@ -28,6 +29,7 @@ final class ConfigurationTest extends TestCase
             'email_debug_from' => null,
             'email_debug_title' => 'An error occured',
             'email_debug_to' => null,
+            'purge' => ['batch_size' => 100, 'aliases' => []],
             'encryption_key' => null,
         ], $this->process([]));
     }
@@ -55,6 +57,31 @@ final class ConfigurationTest extends TestCase
     public function testTheEncryptionKeyIsKeptVerbatim(): void
     {
         self::assertSame('%env(APP_ENCRYPTION_KEY)%', $this->process([['encryption_key' => '%env(APP_ENCRYPTION_KEY)%']])['encryption_key']);
+    }
+
+    public function testThePurgeBatchSizeIsConfigurable(): void
+    {
+        $purge = $this->process([['purge' => ['batch_size' => 25]]])['purge'];
+
+        self::assertIsArray($purge);
+        self::assertSame(25, $purge['batch_size']);
+    }
+
+    /** A legacy name kept alive so a deployed crontab survives a rename. */
+    public function testPurgeAliasesAreKept(): void
+    {
+        $purge = $this->process([['purge' => ['aliases' => ['app:purge']]]])['purge'];
+
+        self::assertIsArray($purge);
+        self::assertSame(['app:purge'], $purge['aliases']);
+    }
+
+    /** A batch of zero would flush on every row; the constraint says so rather than surprising. */
+    public function testAZeroBatchSizeIsRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        $this->process([['purge' => ['batch_size' => 0]]]);
     }
 
     public function testLaterConfigsOverrideEarlierOnes(): void
