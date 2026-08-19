@@ -6,7 +6,9 @@ namespace Jul6Art\CoreBundle\DependencyInjection;
 
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
+use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Security\Encryptor;
+use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Component\Config\FileLocator;
@@ -50,7 +52,54 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $config = $this->processConfiguration(new Configuration(), $configs);
 
         $this->registerEncryption($container, \is_string($config['encryption_key'] ?? null) ? $config['encryption_key'] : null);
+        $this->registerSecurityHeaders($container, \is_array($config['security_headers'] ?? null) ? $config['security_headers'] : []);
+        $this->registerCaptcha($container, \is_array($config['captcha'] ?? null) ? $config['captcha'] : []);
         $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
+    }
+
+    /**
+     * Registered only when switched on: a listener that exists to do nothing on every response
+     * is noise in the container, and the headers must never appear unasked.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerSecurityHeaders(ContainerBuilder $container, array $config): void
+    {
+        if (true !== ($config['enabled'] ?? false)) {
+            return;
+        }
+
+        $headers = $config['headers'] ?? [];
+
+        $container->register(SecurityHeaderListener::class, SecurityHeaderListener::class)
+            ->setArguments([
+                true,
+                // Passed through untouched so an `%env(bool:…)%` placeholder survives to the
+                // container and is resolved at runtime; the constructor's bool type does the
+                // casting. Coercing it here would turn the placeholder string into `true`.
+                $config['csp_enforce'] ?? false,
+                \is_string($config['csp_policy'] ?? null) ? $config['csp_policy'] : null,
+                \is_array($headers) ? $headers : [],
+            ])
+            // Priority -100: run after the controllers and the other listeners have set their
+            // own headers, since this one only fills the gaps.
+            ->addTag('kernel.event_listener', ['event' => 'kernel.response', 'method' => 'onKernelResponse', 'priority' => -100]);
+    }
+
+    /**
+     * @param array<mixed> $config
+     */
+    private function registerCaptcha(ContainerBuilder $container, array $config): void
+    {
+        $operations = $config['operations'] ?? ['+'];
+        $sessionKey = $config['session_key'] ?? '_math_captcha_answer';
+
+        $container->register(MathCaptchaService::class, MathCaptchaService::class)
+            ->setArguments([
+                new Reference('request_stack'),
+                \is_array($operations) ? array_values($operations) : ['+'],
+                \is_string($sessionKey) ? $sessionKey : '_math_captcha_answer',
+            ]);
     }
 
     /**
@@ -188,12 +237,24 @@ class CoreExtension extends Extension implements PrependExtensionInterface
     {
         $configs = $container->resolveEnvPlaceholders($container->getExtensionConfig($this->getAlias()), true);
 
-        $config = $this->processConfiguration(new Configuration(), \is_array($configs) ? $configs : []);
+        // Merged by hand rather than through processConfiguration(): prepend() runs before the
+        // container has turned `%env(...)%` strings into placeholders, so validating the whole
+        // tree here would reject a perfectly legal `%env(bool:FOO)%` on any typed node. Only
+        // the email_debug keys concern this method, and load() validates everything properly.
+        $config = [];
+
+        foreach (\is_array($configs) ? $configs : [] as $candidate) {
+            if (\is_array($candidate)) {
+                $config = [...$config, ...$candidate];
+            }
+        }
 
         return [
             'email_debug' => true === ($config['email_debug'] ?? false),
             'email_debug_from' => self::asStringOrNull($config['email_debug_from'] ?? null),
-            'email_debug_title' => self::asStringOrNull($config['email_debug_title'] ?? null),
+            // The default lives in Configuration too; repeated here because this method no
+            // longer runs the tree that would apply it.
+            'email_debug_title' => self::asStringOrNull($config['email_debug_title'] ?? 'An error occured'),
             'email_debug_to' => self::asStringOrNull($config['email_debug_to'] ?? null),
         ];
     }

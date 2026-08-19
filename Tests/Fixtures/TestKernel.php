@@ -13,7 +13,9 @@ use Jul6Art\CoreBundle\Doctrine\Type\EncryptedStringType;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EntityListener\AbstractEntityListener;
 use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
+use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Security\Encryptor;
+use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEntityListener;
 use Jul6Art\CoreBundle\Tests\Fixtures\Listener\ConcreteEventListener;
@@ -111,13 +113,16 @@ final class TestKernel extends Kernel
                     'core.monolog.html_formatter',
                     'doctrine.orm.default_entity_manager',
                     'event_dispatcher',
+                    'request_stack',
                     'security.token_storage',
                     'security.untracked_token_storage',
                     CascadeSoftDeleteHelper::class,
                     DashboardVoter::class,
                     EncryptedTypeRegistrar::class,
                     Encryptor::class,
+                    MathCaptchaService::class,
                     PurgeCommand::class,
+                    SecurityHeaderListener::class,
                     WidgetVoter::class,
                     'lock.factory',
                     'security.authorization_checker',

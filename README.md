@@ -98,6 +98,82 @@ the same plaintext never produces the same ciphertext twice, and decryption
 authenticates the payload. Pass the key as an env var: it is read at runtime, not baked
 into the container.
 
+HTTP security headers
+---------------------
+
+Defence in depth against an XSS escalating into a take-over. **Off by default**: installing a
+utility bundle must not change the responses of an application that did not ask — a lone
+`X-Frame-Options: DENY` breaks any legitimate embedding.
+
+```yaml
+# config/packages/core.yaml
+core:
+    security_headers:
+        enabled: true
+        csp_enforce: false        # start here, always
+```
+
+That much already sends `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, a closed
+`Permissions-Policy` and a one-year `Strict-Transport-Security`, plus a
+`Content-Security-Policy-Report-Only`.
+
+**Only missing headers are filled.** A controller that set its own keeps it — a CMS preview
+that needs `SAMEORIGIN` to survive its own iframe still works, without an exception list here.
+
+Tune it per header, and drop one with `null`:
+
+```yaml
+core:
+    security_headers:
+        enabled: true
+        headers:
+            X-Frame-Options: 'SAMEORIGIN'
+            Strict-Transport-Security: ~      # not sent at all
+            X-Robots-Tag: 'noindex'           # extra headers are allowed too
+        csp_policy: "default-src 'self'; connect-src 'self' https://mercure.example.com"
+```
+
+> ⚠️ **Two traps.** The default policy keeps `connect-src` closed to `'self'`, because a
+> library cannot know which hosts your application talks to: an EventSource, an analytics
+> endpoint or a CDN needs `csp_policy` widened, or it fails **silently in the browser**.
+> And `csp_enforce: true` before reading the violation reports is how a working page stops
+> loading its own assets — report-only first, always.
+
+Captcha
+-------
+
+An arithmetic challenge for public forms — register, password reset — where bots submit
+payloads just to make the application send mail.
+
+```php
+// rendering the form
+return $this->render('security/register.html.twig', [
+    'captchaQuestion' => $this->captcha->generate(),   // "3 + 5"
+]);
+
+// handling the submission
+if (!$this->captcha->validate($request->request->getString('captcha'))) {
+    // refuse, and call generate() again for the next attempt
+}
+```
+
+```yaml
+core:
+    captcha:
+        operations: ['+', '-', '*']            # default: ['+']
+        session_key: '_math_captcha_answer'
+```
+
+`generate()` stores the expected answer in the session and returns the text to display.
+`validate()` checks the submission and **consumes** the stored answer whatever the outcome, so
+a right answer cannot be replayed and a wrong one forces a fresh question — **call
+`generate()` again on every re-render**, or the next attempt validates against nothing.
+Subtractions never ask for a negative answer, since only digits are accepted.
+
+> ⚠️ Form-only by design. For a JSON client use reCAPTCHA or hCaptcha instead: a challenge
+> whose answer lives in the caller's own session is worth little to an API consumer.
+
 Retention
 ---------
 

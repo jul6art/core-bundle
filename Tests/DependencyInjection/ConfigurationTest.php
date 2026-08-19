@@ -29,6 +29,16 @@ final class ConfigurationTest extends TestCase
             'email_debug_from' => null,
             'email_debug_title' => 'An error occured',
             'email_debug_to' => null,
+            'security_headers' => [
+                'enabled' => false,
+                'csp_enforce' => false,
+                'csp_policy' => null,
+                'headers' => [],
+            ],
+            'captcha' => [
+                'operations' => ['+'],
+                'session_key' => '_math_captcha_answer',
+            ],
             'purge' => ['batch_size' => 100, 'aliases' => []],
             'encryption_key' => null,
         ], $this->process([]));
@@ -65,6 +75,27 @@ final class ConfigurationTest extends TestCase
 
         self::assertIsArray($purge);
         self::assertSame(25, $purge['batch_size']);
+    }
+
+    /**
+     * `csp_enforce` is a scalar node so a deployment can drive it from the environment; the
+     * placeholder has to survive processing untouched to be resolved at runtime.
+     */
+    public function testTheCspEnforceFlagAcceptsAnEnvPlaceholder(): void
+    {
+        $headers = $this->process([['security_headers' => ['csp_enforce' => '%env(bool:CSP_ENFORCE)%']]])['security_headers'];
+
+        self::assertIsArray($headers);
+        self::assertSame('%env(bool:CSP_ENFORCE)%', $headers['csp_enforce']);
+    }
+
+    /** Header overrides must survive processing verbatim, including their casing. */
+    public function testHeaderOverridesAreKeptAsGiven(): void
+    {
+        $headers = $this->process([['security_headers' => ['headers' => ['X-Frame-Options' => 'SAMEORIGIN']]]])['security_headers'];
+
+        self::assertIsArray($headers);
+        self::assertSame(['X-Frame-Options' => 'SAMEORIGIN'], $headers['headers']);
     }
 
     /** A legacy name kept alive so a deployed crontab survives a rename. */
