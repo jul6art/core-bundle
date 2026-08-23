@@ -29,11 +29,13 @@ use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
 use Jul6Art\CoreBundle\Twig\PdfAssetExtension;
+use Jul6Art\CoreBundle\Twig\PerformanceExtension;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Bundle\FrameworkBundle\DataCollector\AbstractDataCollector;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
@@ -223,6 +225,13 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             ]);
 
         if (class_exists(AbstractExtension::class)) {
+            // Le panneau du profileur s'en sert pour ne proposer les liens vers l'écran complet
+            // que si l'application a importé ses routes. `router` plutôt qu'un paramètre : la
+            // réponse dépend de l'environnement, et le panneau ne doit jamais casser la page.
+            $container->register(PerformanceExtension::class, PerformanceExtension::class)
+                ->setArguments([new Reference('router', ContainerInterface::NULL_ON_INVALID_REFERENCE)])
+                ->addTag('twig.extension');
+
             $container->register(NumberExtension::class, NumberExtension::class)
                 ->setArguments([new Reference(NumberFormatter::class)])
                 ->addTag('twig.extension');

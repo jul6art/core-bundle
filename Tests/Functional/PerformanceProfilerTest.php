@@ -17,6 +17,7 @@ use Jul6Art\CoreBundle\Performance\Store\JsonlFileStore;
 use Jul6Art\CoreBundle\Performance\Store\PerformanceRecord;
 use Jul6Art\CoreBundle\Performance\Store\PerformanceStoreInterface;
 use PHPUnit\Framework\Attributes\CoversNothing;
+use Twig\Environment;
 
 /**
  * The per-request performance profiler: what has to be wired, and what must NOT be.
@@ -164,6 +165,33 @@ final class PerformanceProfilerTest extends AbstractFunctionalTestCase
             self::assertTrue($container->has($command), \sprintf('%s doit être enregistrée.', $command));
             self::assertInstanceOf($command, $container->get($command));
         }
+    }
+
+    /**
+     * ⚠️ Le gabarit du panneau se RÉEND, il ne se relit pas.
+     *
+     * Il référençait une fonction Twig restée dans l'application d'où ce code vient
+     * (`performance_route_exists`) et les anciens noms de ses routes : le panneau levait une
+     * SyntaxError au premier affichage, ce qu'aucun test ne voyait — la collecte, elle,
+     * fonctionnait. Un gabarit ne se prouve qu'en le rendant.
+     */
+    public function testTheCollectorTemplateCompilesAndRenders(): void
+    {
+        $container = $this->boot(coreConfig: ['performance' => ['enabled' => true]]);
+
+        $twig = $container->get('twig');
+        self::assertInstanceOf(Environment::class, $twig);
+
+        // Compiler suffit à attraper une fonction inconnue : c'est le parseur qui lève.
+        $source = $twig->getLoader()->getSourceContext('@Core/performance/collector.html.twig');
+        $twig->parse($twig->tokenize($source));
+
+        self::assertStringContainsString('core_performance_route_exists', $source->getCode());
+        self::assertStringNotContainsString(
+            'app_admin_performance_',
+            $source->getCode(),
+            'Les routes de l\'écran s\'appellent admin_performance_* — le préfixe que le collecteur ignore.',
+        );
     }
 
     private function record(string $route): PerformanceRecord

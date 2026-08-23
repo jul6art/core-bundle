@@ -176,6 +176,9 @@ final class TestKernel extends Kernel
             'php_errors' => ['log' => true],
             'translator' => ['default_path' => '%kernel.project_dir%/translations'],
             'session' => ['storage_factory_id' => 'session.storage.factory.mock_file'],
+            // Le routeur, sans route : le panneau du profileur utilise `path()`, et un gabarit
+            // ne se prouve qu'en le compilant — ce qui exige que la fonction existe.
+            'router' => ['utf8' => true, 'resource' => __DIR__.'/routes.php', 'type' => 'php'],
             'mailer' => ['dsn' => 'null://null'],
             // flock store: the purge command's concurrency guard needs a real lock factory.
             'lock' => true,

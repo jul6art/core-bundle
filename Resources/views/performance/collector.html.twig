@@ -45,12 +45,12 @@
 {% block panel %}
     <h2>Performance</h2>
 
-    {% if performance_route_exists('app_admin_performance_dashboard') %}
+    {% if core_performance_route_exists('admin_performance_dashboard') %}
         <div class="perf-actions">
-            <a href="{{ path('app_admin_performance_dashboard') }}" class="perf-btn" target="_blank" rel="noopener">Open full dashboard ↗</a>
-            <a href="{{ path('app_admin_performance_export', { format: 'csv' }) }}" class="perf-btn">Export CSV</a>
-            <a href="{{ path('app_admin_performance_export', { format: 'json' }) }}" class="perf-btn">Export JSON</a>
-            <form action="{{ path('app_admin_performance_clear') }}" method="post" style="display:inline;" onsubmit="return confirm('Clear all performance records?');">
+            <a href="{{ path('admin_performance_dashboard') }}" class="perf-btn" target="_blank" rel="noopener">Open full dashboard ↗</a>
+            <a href="{{ path('admin_performance_export', { format: 'csv' }) }}" class="perf-btn">Export CSV</a>
+            <a href="{{ path('admin_performance_export', { format: 'json' }) }}" class="perf-btn">Export JSON</a>
+            <form action="{{ path('admin_performance_clear') }}" method="post" style="display:inline;" onsubmit="return confirm('Clear all performance records?');">
                 <button type="submit" class="perf-btn perf-btn-danger">Clear store</button>
             </form>
         </div>
