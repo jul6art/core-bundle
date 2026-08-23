@@ -267,7 +267,7 @@ What you get:
 | Piece | Role |
 | --- | --- |
 | `Performance\Profiler\Middleware\PerformanceMiddleware` | DBAL middleware, always wired, tagged `doctrine.middleware` |
-| `Performance\Profiler\QueryTracker` | counts total / distinct queries and their time |
+| `Performance\Profiler\QueryTracker` | counts total / distinct queries and their time — **transactions included** (`START TRANSACTION`, `COMMIT`, `ROLLBACK`), so the total matches what the Doctrine collector reports |
 | `Performance\Profiler\PerformanceDataCollector` | the toolbar panel — registered only when FrameworkBundle is installed |
 | `Performance\Store\PerformanceStoreInterface` | the store contract; `JsonlFileStore` is the shipped implementation |
 | `Performance\Service\DashboardViewBuilder` | aggregates the store into a ready-to-render view (slowest routes, N+1 suspects) |
