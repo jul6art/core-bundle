@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Tests\Functional;
 
 use Doctrine\DBAL\Driver\Middleware as DbalMiddleware;
+use Doctrine\ORM\EntityManagerInterface;
 use Jul6Art\CoreBundle\Performance\Command\ClearCommand;
 use Jul6Art\CoreBundle\Performance\Command\ExportCommand;
 use Jul6Art\CoreBundle\Performance\EventSubscriber\PerformanceSubscriber;
@@ -192,6 +193,40 @@ final class PerformanceProfilerTest extends AbstractFunctionalTestCase
             $source->getCode(),
             'Les routes de l\'écran s\'appellent admin_performance_* — le préfixe que le collecteur ignore.',
         );
+    }
+
+    /**
+     * ⚠️ Le décompte doit être celui de Doctrine, transactions COMPRISES.
+     *
+     * `beginTransaction()` / `commit()` ne passent ni par `query()`, ni par `exec()`, ni par
+     * `prepare()` : sans surcharge dédiée, un `flush()` — qui encadre toujours ses écritures —
+     * coûtait deux allers-retours invisibles. Sur une page à six écritures, le panneau annonçait
+     * 13 requêtes contre 25 pour le collecteur Doctrine (constaté sur devinlive le 2026-08-24).
+     * Deux chiffres qui se contredisent, c'est un outil qu'on cesse de croire.
+     */
+    public function testTransactionsAreCountedLikeDoctrineDoes(): void
+    {
+        $container = $this->boot(coreConfig: ['performance' => ['enabled' => true]], withOrm: true);
+
+        $tracker = $container->get(QueryTracker::class);
+        self::assertInstanceOf(QueryTracker::class, $tracker);
+        $tracker->reset();
+
+        $entityManager = $container->get('doctrine.orm.default_entity_manager');
+        self::assertInstanceOf(EntityManagerInterface::class, $entityManager);
+        $connection = $entityManager->getConnection();
+        $connection->executeQuery('SELECT 1');
+        $connection->beginTransaction();
+        $connection->executeStatement('CREATE TABLE perf_probe (id INTEGER PRIMARY KEY)');
+        $connection->commit();
+
+        // 1 SELECT + 1 START TRANSACTION + 1 CREATE + 1 COMMIT : le même total que ce que le
+        // collecteur Doctrine afficherait pour cette séquence.
+        self::assertSame(4, $tracker->getQueryCount());
+
+        $statements = array_column($tracker->getAggregates(), 'sql');
+        self::assertContains('START TRANSACTION', $statements);
+        self::assertContains('COMMIT', $statements);
     }
 
     private function record(string $route): PerformanceRecord

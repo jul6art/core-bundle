@@ -41,4 +41,48 @@ final class PerformanceConnection extends AbstractConnectionMiddleware
             $this->tracker->end($handle);
         }
     }
+
+    /**
+     * ⚠️ Les transactions COMPTENT, et c'est ce qui manquait.
+     *
+     * `beginTransaction()`, `commit()` et `rollBack()` ne passent ni par `query()`, ni par
+     * `exec()`, ni par `prepare()` : sans ces trois surcharges, un `flush()` Doctrine — qui
+     * encadre systématiquement ses écritures d'une transaction — coûtait deux allers-retours
+     * invisibles. Sur une page faisant six écritures, le panneau annonçait 13 requêtes là où le
+     * collecteur Doctrine en comptait 25 : les douze manquantes étaient les six START TRANSACTION
+     * et les six COMMIT.
+     *
+     * Deux chiffres qui se contredisent, c'est un outil de mesure qu'on cesse de croire — d'où
+     * l'alignement sur le vocabulaire exact du collecteur Doctrine (« START TRANSACTION »,
+     * « COMMIT », « ROLLBACK »), qui rend les deux panneaux comparables ligne à ligne.
+     */
+    public function beginTransaction(): void
+    {
+        $handle = $this->tracker->start('START TRANSACTION');
+        try {
+            parent::beginTransaction();
+        } finally {
+            $this->tracker->end($handle);
+        }
+    }
+
+    public function commit(): void
+    {
+        $handle = $this->tracker->start('COMMIT');
+        try {
+            parent::commit();
+        } finally {
+            $this->tracker->end($handle);
+        }
+    }
+
+    public function rollBack(): void
+    {
+        $handle = $this->tracker->start('ROLLBACK');
+        try {
+            parent::rollBack();
+        } finally {
+            $this->tracker->end($handle);
+        }
+    }
 }
