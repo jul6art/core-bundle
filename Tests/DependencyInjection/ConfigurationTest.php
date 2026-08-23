@@ -48,8 +48,35 @@ final class ConfigurationTest extends TestCase
                 'session_key' => '_math_captcha_answer',
             ],
             'purge' => ['batch_size' => 100, 'aliases' => []],
+            // ⚠️ Le profileur est ÉTEINT par défaut : allumé, il écrit un enregistrement par
+            // requête, et un projet qui prendrait ce bundle pour ses entités se retrouverait avec
+            // un store qui grossit sans l'avoir demandé.
+            'performance' => [
+                'enabled' => false,
+                'path' => '%kernel.project_dir%/var/performance',
+                'rotation' => 'daily',
+                'max_records' => 100000,
+                'ignored_route_prefix' => 'admin_performance_',
+            ],
             'encryption_key' => null,
         ], $this->process([]));
+    }
+
+    public function testTheProfilerIsOffByDefaultAndConfigurable(): void
+    {
+        $performance = $this->process([['performance' => ['enabled' => true, 'rotation' => 'weekly', 'max_records' => 500]]])['performance'];
+
+        self::assertIsArray($performance);
+        self::assertTrue($performance['enabled']);
+        self::assertSame('weekly', $performance['rotation']);
+        self::assertSame(500, $performance['max_records']);
+    }
+
+    public function testAnUnknownRotationIsRefused(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        $this->process([['performance' => ['rotation' => 'hourly']]]);
     }
 
     public function testItKeepsTheConfiguredValues(): void

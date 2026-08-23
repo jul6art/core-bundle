@@ -1,0 +1,118 @@
+{% extends '@WebProfiler/Profiler/layout.html.twig' %}
+
+{% block toolbar %}
+    {% set record = collector.record %}
+    {% set queryCount = record.query_count|default(0) %}
+    {% set durationMs = record.duration_ms|default(0) %}
+    {% set distinctCount = record.distinct_query_count|default(0) %}
+
+    {% set status = '' %}
+    {% if queryCount >= 50 %}{% set status = 'red' %}{% elseif queryCount >= 20 %}{% set status = 'yellow' %}{% endif %}
+
+    {% set icon %}
+        <span class="sf-toolbar-label">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </span>
+        <span class="sf-toolbar-value">{{ queryCount }}</span>
+        <span class="sf-toolbar-label"> queries</span>
+    {% endset %}
+
+    {% set text %}
+        <div class="sf-toolbar-info-piece"><b>Route</b><span>{{ record.route|default('(unmatched)') }}</span></div>
+        <div class="sf-toolbar-info-piece"><b>Method / status</b><span>{{ record.method|default('-') }} / {{ record.status_code|default('-') }}</span></div>
+        <div class="sf-toolbar-info-piece"><b>Total duration</b><span>{{ durationMs|number_format(1) }} ms</span></div>
+        <div class="sf-toolbar-info-piece"><b>DB queries</b><span>{{ queryCount }} ({{ distinctCount }} distinct)</span></div>
+        <div class="sf-toolbar-info-piece"><b>DB time</b><span>{{ record.db_time_ms|default(0)|number_format(1) }} ms</span></div>
+        <div class="sf-toolbar-info-piece"><b>Peak memory</b><span>{{ (record.memory_peak_bytes|default(0) / 1048576)|number_format(1) }} MiB</span></div>
+        <div class="sf-toolbar-info-piece"><b>Response size</b><span>{{ (record.response_size_bytes|default(0) / 1024)|number_format(1) }} KiB</span></div>
+    {% endset %}
+
+    {{ include('@WebProfiler/Profiler/toolbar_item.html.twig', { link: profiler_url, status: status }) }}
+{% endblock %}
+
+{% block menu %}
+    <span class="label {{ collector.record.query_count|default(0) >= 50 ? 'label-status-error' : '' }}">
+        <span class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </span>
+        <strong>Performance</strong>
+        {% if collector.record.query_count|default(0) > 0 %}
+            <span class="count"><span>{{ collector.record.query_count }}</span></span>
+        {% endif %}
+    </span>
+{% endblock %}
+
+{% block panel %}
+    <h2>Performance</h2>
+
+    {% if performance_route_exists('app_admin_performance_dashboard') %}
+        <div class="perf-actions">
+            <a href="{{ path('app_admin_performance_dashboard') }}" class="perf-btn" target="_blank" rel="noopener">Open full dashboard ↗</a>
+            <a href="{{ path('app_admin_performance_export', { format: 'csv' }) }}" class="perf-btn">Export CSV</a>
+            <a href="{{ path('app_admin_performance_export', { format: 'json' }) }}" class="perf-btn">Export JSON</a>
+            <form action="{{ path('app_admin_performance_clear') }}" method="post" style="display:inline;" onsubmit="return confirm('Clear all performance records?');">
+                <button type="submit" class="perf-btn perf-btn-danger">Clear store</button>
+            </form>
+        </div>
+    {% endif %}
+
+    {% set record = collector.record %}
+    {% if record is null %}
+        <p>No performance data collected for this request.</p>
+    {% else %}
+        <div class="metrics">
+            <div class="metric"><span class="value">{{ record.query_count }}</span><span class="label">SQL queries</span></div>
+            <div class="metric"><span class="value">{{ record.distinct_query_count }}</span><span class="label">Distinct queries</span></div>
+            <div class="metric"><span class="value">{{ record.db_time_ms|number_format(1) }} ms</span><span class="label">DB time</span></div>
+            <div class="metric"><span class="value">{{ record.duration_ms|number_format(1) }} ms</span><span class="label">Total duration</span></div>
+            <div class="metric"><span class="value">{{ (record.memory_peak_bytes / 1048576)|number_format(1) }} MiB</span><span class="label">Peak memory</span></div>
+            <div class="metric"><span class="value">{{ (record.response_size_bytes / 1024)|number_format(1) }} KiB</span><span class="label">Response size</span></div>
+        </div>
+
+        <h3>Context</h3>
+        <table>
+            <tbody>
+                <tr><th scope="row">Route</th><td>{{ record.route|default('(unmatched)') }}</td></tr>
+                <tr><th scope="row">Method</th><td>{{ record.method }}</td></tr>
+                <tr><th scope="row">URI</th><td>{{ record.uri }}</td></tr>
+                <tr><th scope="row">Status code</th><td>{{ record.status_code }}</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Queries ({{ record.queries|length }} distinct fingerprints)</h3>
+        {% if record.queries is empty %}
+            <p>No queries executed.</p>
+        {% else %}
+            <table class="queries">
+                <thead>
+                    <tr><th>#</th><th>Count</th><th>Total (ms)</th><th>Avg (ms)</th><th>SQL (normalized)</th></tr>
+                </thead>
+                <tbody>
+                    {% for query in record.queries|sort((a, b) => b.count <=> a.count) %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ query.count }}</td>
+                            <td>{{ query.total_time|number_format(2) }}</td>
+                            <td>{{ (query.total_time / query.count)|number_format(2) }}</td>
+                            <td><code>{{ query.sql }}</code></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    {% endif %}
+
+    <style>
+        .perf-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 20px; padding: 10px; border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--base-1, #f8f8f8); }
+        .perf-actions .perf-btn { display: inline-block; padding: 6px 12px; background: var(--base-0, #fff); border: 1px solid var(--border-color, #ddd); border-radius: 4px; color: var(--color-text, #222); text-decoration: none; font-size: 13px; cursor: pointer; }
+        .perf-actions .perf-btn:hover { background: var(--tab-background, #eee); }
+        .perf-actions .perf-btn-danger { border-color: #c00; color: #c00; background: transparent; }
+        .perf-actions .perf-btn-danger:hover { background: #c00; color: #fff; }
+        .perf-actions form { margin: 0; padding: 0; }
+        .metrics { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+        .metrics .metric { flex: 1 1 140px; padding: 12px; border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--base-1, #f8f8f8); }
+        .metrics .metric .value { display: block; font-size: 1.3em; font-weight: 600; }
+        .metrics .metric .label { display: block; font-size: 0.85em; color: var(--color-muted, #666); margin-top: 4px; }
+        table.queries td code { white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
+    </style>
+{% endblock %}

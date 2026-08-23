@@ -9,6 +9,19 @@ use Jul6Art\CoreBundle\Controller\BulkActionRunner;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
+use Jul6Art\CoreBundle\Performance\CacheClearer\PerformanceStoreClearer;
+use Jul6Art\CoreBundle\Performance\CacheWarmer\PerformanceStoreWarmer;
+use Jul6Art\CoreBundle\Performance\Command\ClearCommand;
+use Jul6Art\CoreBundle\Performance\Command\ExportCommand;
+use Jul6Art\CoreBundle\Performance\EventSubscriber\PerformanceSubscriber;
+use Jul6Art\CoreBundle\Performance\Profiler\Middleware\PerformanceMiddleware;
+use Jul6Art\CoreBundle\Performance\Profiler\PerformanceDataCollector;
+use Jul6Art\CoreBundle\Performance\Profiler\QueryHasher;
+use Jul6Art\CoreBundle\Performance\Profiler\QueryTracker;
+use Jul6Art\CoreBundle\Performance\Service\DashboardViewBuilder;
+use Jul6Art\CoreBundle\Performance\Service\PerformanceExporter;
+use Jul6Art\CoreBundle\Performance\Store\JsonlFileStore;
+use Jul6Art\CoreBundle\Performance\Store\PerformanceStoreInterface;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
@@ -17,6 +30,7 @@ use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
 use Jul6Art\CoreBundle\Twig\PdfAssetExtension;
 use Monolog\Formatter\HtmlFormatter;
+use Symfony\Bundle\FrameworkBundle\DataCollector\AbstractDataCollector;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -66,6 +80,92 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerFormatting($container, $config);
         $this->registerFlashTranslator($container, \is_array($config['flash'] ?? null) ? $config['flash'] : []);
         $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
+        $this->registerPerformance($container, \is_array($config['performance'] ?? null) ? $config['performance'] : []);
+    }
+
+    /**
+     * The per-request performance profiler.
+     *
+     * ⚠️ The DBAL middleware and the store are registered **even when `enabled` is false**, and
+     * that is deliberate: the middleware resets its tracker on every request, so a long-running
+     * worker cannot accumulate query rows in memory, and switching the flag on needs no cache
+     * warm-up beyond the usual one. What `enabled` gates is *persistence* — the subscriber
+     * writes nothing, and the panel stays empty.
+     *
+     * The data collector is registered only when FrameworkBundle is installed: it extends that
+     * package's AbstractDataCollector, which this bundle only suggests. Referencing the class
+     * unconditionally would make the container unbuildable in an application that took the
+     * bundle for its entities alone.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerPerformance(ContainerBuilder $container, array $config): void
+    {
+        $enabled = (bool) ($config['enabled'] ?? false);
+        $path = \is_string($config['path'] ?? null) ? $config['path'] : '%kernel.project_dir%/var/performance';
+        $rotation = \is_string($config['rotation'] ?? null) ? $config['rotation'] : 'daily';
+        $maxRecords = \is_int($config['max_records'] ?? null) ? $config['max_records'] : 100000;
+        $ignoredPrefix = \is_string($config['ignored_route_prefix'] ?? null) ? $config['ignored_route_prefix'] : 'admin_performance_';
+
+        $container->register(JsonlFileStore::class, JsonlFileStore::class)
+            ->setArguments(['$directory' => $path, '$rotation' => $rotation, '$maxRecords' => $maxRecords])
+            ->setPublic(false);
+        $container->setAlias(PerformanceStoreInterface::class, JsonlFileStore::class)->setPublic(true);
+
+        $container->register(QueryHasher::class, QueryHasher::class);
+        $container->register(QueryTracker::class, QueryTracker::class)
+            ->setArguments([new Reference(QueryHasher::class)])
+            ->setPublic(true);
+
+        $container->register(PerformanceMiddleware::class, PerformanceMiddleware::class)
+            ->setArguments([new Reference(QueryTracker::class)])
+            ->addTag('doctrine.middleware')
+            ->setPublic(true);
+
+        $container->register(PerformanceSubscriber::class, PerformanceSubscriber::class)
+            ->setArguments([
+                new Reference(QueryTracker::class),
+                new Reference(PerformanceStoreInterface::class),
+                $enabled,
+                $ignoredPrefix,
+            ])
+            ->addTag('kernel.event_subscriber')
+            ->setPublic(true);
+
+        $container->register(PerformanceExporter::class, PerformanceExporter::class);
+        $container->register(DashboardViewBuilder::class, DashboardViewBuilder::class)
+            ->setArguments([new Reference(PerformanceStoreInterface::class)])
+            ->setPublic(true);
+
+        $container->register(PerformanceStoreWarmer::class, PerformanceStoreWarmer::class)
+            ->setArguments(['$directory' => $path])
+            ->addTag('kernel.cache_warmer');
+
+        $container->register(PerformanceStoreClearer::class, PerformanceStoreClearer::class)
+            ->setArguments([new Reference(PerformanceStoreInterface::class)])
+            ->addTag('kernel.cache_clearer');
+
+        if (class_exists(AbstractDataCollector::class)) {
+            $container->register(PerformanceDataCollector::class, PerformanceDataCollector::class)
+                ->setArguments([new Reference(PerformanceSubscriber::class)])
+                ->addTag('data_collector', [
+                    'template' => '@Core/performance/collector.html.twig',
+                    'id' => 'core.performance',
+                    'priority' => 256,
+                ]);
+        }
+
+        // String event names would not help here: the two commands are only usable with
+        // symfony/console, which this bundle suggests rather than requires.
+        if (class_exists(Command::class)) {
+            $container->register(ClearCommand::class, ClearCommand::class)
+                ->setArguments([new Reference(PerformanceStoreInterface::class)])
+                ->addTag('console.command');
+
+            $container->register(ExportCommand::class, ExportCommand::class)
+                ->setArguments([new Reference(PerformanceStoreInterface::class), new Reference(PerformanceExporter::class)])
+                ->addTag('console.command');
+        }
     }
 
     /**

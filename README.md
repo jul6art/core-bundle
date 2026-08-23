@@ -229,6 +229,54 @@ core:
         aliases: ['app:purge']   # keeps a legacy name alive so a deployed crontab survives
 ```
 
+Performance profiler
+--------------------
+
+A per-request profiler that answers one question: **how many queries did this route make?** A
+DBAL middleware counts and fingerprints every statement, a subscriber writes one JSONL record per
+request, and a data collector adds a panel to the web debug toolbar.
+
+It exists because the N+1 is the first cause of slowness in a Symfony application and the easiest
+to miss: the code reads well, the tests are green, the page looks fine, and it fires 240 queries.
+
+```yaml
+# config/packages/core.yaml
+core:
+    performance:
+        enabled: false                                  # OFF by default — see below
+        path: '%kernel.project_dir%/var/performance'    # append-only JSONL store
+        rotation: daily                                 # daily | weekly | none
+        max_records: 100000                             # oldest file pruned above this cap
+        ignored_route_prefix: 'admin_performance_'      # the profiler UI must not measure itself
+
+when@dev:
+    core:
+        performance:
+            enabled: true
+```
+
+⚠️ **Keep it off in production** unless you are deliberately profiling: it appends a record on
+every request, and the store grows accordingly.
+
+⚠️ **The middleware is wired even when `enabled` is false, and that is deliberate**: it resets its
+tracker on each request, so a long-running worker cannot accumulate query rows in memory. What the
+flag gates is *persistence* — nothing is written, and the panel stays empty.
+
+What you get:
+
+| Piece | Role |
+| --- | --- |
+| `Performance\Profiler\Middleware\PerformanceMiddleware` | DBAL middleware, always wired, tagged `doctrine.middleware` |
+| `Performance\Profiler\QueryTracker` | counts total / distinct queries and their time |
+| `Performance\Profiler\PerformanceDataCollector` | the toolbar panel — registered only when FrameworkBundle is installed |
+| `Performance\Store\PerformanceStoreInterface` | the store contract; `JsonlFileStore` is the shipped implementation |
+| `Performance\Service\DashboardViewBuilder` | aggregates the store into a ready-to-render view (slowest routes, N+1 suspects) |
+| `Performance\Service\PerformanceExporter` | streams the store as CSV or JSON |
+| `core:performance:clear` / `core:performance:export` | the same, from the console |
+
+The bundle ships **no route and no page**: `jul6art/admin-bundle` provides the dashboard for
+back-office projects, and any application can render `DashboardViewBuilder::build()` its own way.
+
 Service traits
 --------------
 
