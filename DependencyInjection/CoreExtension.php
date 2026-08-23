@@ -155,15 +155,22 @@ class CoreExtension extends Extension implements PrependExtensionInterface
                 ]);
         }
 
-        // String event names would not help here: the two commands are only usable with
-        // symfony/console, which this bundle suggests rather than requires.
-        if (class_exists(Command::class)) {
+        // Les deux commandes prennent un verrou — purger ou exporter pendant qu'une requête écrit
+        // dans le store donnerait un fichier tronqué. Elles n'existent donc que si `symfony/lock`
+        // et `symfony/console` sont là, exactement comme `core:purge` ; et le
+        // `PerformanceCommandPass` les retire encore si `framework.lock` n'a jamais été configuré,
+        // auquel cas la classe existe mais le service `lock.factory` non.
+        if (class_exists(Command::class) && class_exists(LockFactory::class)) {
             $container->register(ClearCommand::class, ClearCommand::class)
-                ->setArguments([new Reference(PerformanceStoreInterface::class)])
+                ->setArguments([new Reference(PerformanceStoreInterface::class), new Reference('lock.factory')])
                 ->addTag('console.command');
 
             $container->register(ExportCommand::class, ExportCommand::class)
-                ->setArguments([new Reference(PerformanceStoreInterface::class), new Reference(PerformanceExporter::class)])
+                ->setArguments([
+                    new Reference(PerformanceStoreInterface::class),
+                    new Reference(PerformanceExporter::class),
+                    new Reference('lock.factory'),
+                ])
                 ->addTag('console.command');
         }
     }

@@ -16,6 +16,8 @@ use Jul6Art\CoreBundle\EntityListener\AbstractEntityListener;
 use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
+use Jul6Art\CoreBundle\Performance\Command\ClearCommand;
+use Jul6Art\CoreBundle\Performance\Command\ExportCommand;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
@@ -133,6 +135,11 @@ final class TestKernel extends Kernel
                     NumberFormatter::class,
                     NumberTypeGroupingExtension::class,
                     PurgeCommand::class,
+                    // Les commandes du profileur : taguées, donc instanciées paresseusement — un
+                    // mauvais câblage n'explose qu'à l'exécution. Les exposer permet au test de
+                    // les résoudre, ce qui est le seul moyen de l'attraper.
+                    ClearCommand::class,
+                    ExportCommand::class,
                     SecurityHeaderListener::class,
                     WidgetVoter::class,
                     'lock.factory',

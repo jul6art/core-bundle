@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Tests\Functional;
 
 use Doctrine\DBAL\Driver\Middleware as DbalMiddleware;
+use Jul6Art\CoreBundle\Performance\Command\ClearCommand;
+use Jul6Art\CoreBundle\Performance\Command\ExportCommand;
 use Jul6Art\CoreBundle\Performance\EventSubscriber\PerformanceSubscriber;
 use Jul6Art\CoreBundle\Performance\Profiler\Middleware\PerformanceMiddleware;
+use Jul6Art\CoreBundle\Performance\Profiler\PerformanceDataCollector;
 use Jul6Art\CoreBundle\Performance\Profiler\QueryHasher;
 use Jul6Art\CoreBundle\Performance\Profiler\QueryTracker;
 use Jul6Art\CoreBundle\Performance\Service\DashboardViewBuilder;
@@ -120,6 +123,47 @@ final class PerformanceProfilerTest extends AbstractFunctionalTestCase
 
         self::assertTrue($container->has(PerformanceMiddleware::class));
         self::assertInstanceOf(DbalMiddleware::class, $container->get(PerformanceMiddleware::class));
+    }
+
+    /**
+     * ⚠️ Les trois défauts qui rendaient le panneau invisible, figés ici.
+     *
+     * Le collecteur collectait parfaitement ; c'est son IDENTITÉ qui était fausse. Le profileur
+     * indexe les collecteurs par `getName()`, et le tag déclarait un autre `id` — donc aucun
+     * panneau, ni dans la barre de debug ni dans le profileur, et aucune erreur nulle part.
+     * Le gabarit, lui, pointait le chemin relatif aux templates de l'application d'où ce code a
+     * été extrait.
+     */
+    public function testTheCollectorIdentityMatchesWhatTheExtensionDeclares(): void
+    {
+        $extension = (string) file_get_contents(\dirname(__DIR__, 2).'/DependencyInjection/CoreExtension.php');
+
+        self::assertStringContainsString("'id' => 'core.performance'", $extension);
+        self::assertSame('core.performance', new PerformanceDataCollector(
+            new PerformanceSubscriber(new QueryTracker(new QueryHasher()), new JsonlFileStore(sys_get_temp_dir(), 'none', 1), false),
+        )->getName(), 'Le nom du collecteur doit être celui que le tag déclare.');
+
+        $template = PerformanceDataCollector::getTemplate();
+        self::assertSame('@Core/performance/collector.html.twig', $template);
+        self::assertFileExists(
+            \dirname(__DIR__, 2).'/Resources/views/performance/collector.html.twig',
+            'Le gabarit déclaré doit exister dans le bundle.',
+        );
+    }
+
+    /**
+     * ⚠️ Les commandes taguées sont instanciées PARESSEUSEMENT : un mauvais nombre d'arguments
+     * passe `cache:clear` sans un mot et n'explose qu'à l'exécution — ou à `lint:container`.
+     * Les résoudre ici est le seul moyen de l'attraper dans une suite.
+     */
+    public function testTheCommandsAreConstructibleAsWired(): void
+    {
+        $container = $this->boot(coreConfig: ['performance' => ['enabled' => true]]);
+
+        foreach ([ClearCommand::class, ExportCommand::class] as $command) {
+            self::assertTrue($container->has($command), \sprintf('%s doit être enregistrée.', $command));
+            self::assertInstanceOf($command, $container->get($command));
+        }
     }
 
     private function record(string $route): PerformanceRecord

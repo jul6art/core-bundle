@@ -34,14 +34,26 @@ final class PerformanceDataCollector extends AbstractDataCollector
         ];
     }
 
+    /**
+     * ⚠️ Doit être IDENTIQUE à l'`id` du tag `data_collector` posé par l'extension.
+     *
+     * Le profileur indexe les collecteurs par ce nom : le tag disant `core.performance` et cette
+     * méthode `app.performance`, le panneau ne s'affichait ni dans la barre de debug ni dans le
+     * profileur — sans la moindre erreur, puisque le collecteur COLLECTAIT correctement.
+     */
     public function getName(): string
     {
-        return 'app.performance';
+        return 'core.performance';
     }
 
+    /**
+     * ⚠️ Chemin du bundle, pas du projet. Il valait `performance/collector.html.twig` — le chemin
+     * relatif aux templates de l'application d'où ce code vient — et pointait donc vers un
+     * gabarit qui n'existe pas ici.
+     */
     public static function getTemplate(): string
     {
-        return 'performance/collector.html.twig';
+        return '@Core/performance/collector.html.twig';
     }
 
     public function isActive(): bool
