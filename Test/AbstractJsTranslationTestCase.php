@@ -6,6 +6,7 @@ namespace Jul6Art\CoreBundle\Test;
 
 use Jul6Art\CoreBundle\Translation\JsTranslationAudit;
 use Jul6Art\CoreBundle\Translation\JsTranslationScanner;
+use Jul6Art\CoreBundle\Translation\ServerDomainScanner;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Translation\TranslatorBagInterface;
 
@@ -114,6 +115,88 @@ abstract class AbstractJsTranslationTestCase extends KernelTestCase
             "These templates still hand labels to JavaScript through an HTML attribute:\n  - %s",
             implode("\n  - ", $offenders),
         ));
+    }
+
+    /**
+     * The other half of a domain move: the callers left behind.
+     *
+     * ⚠️ Moving a vocabulary into the browser domain is the easy half. The same status is also
+     * rendered server-side — a chip on the record page, an option in a filter — and a `|trans`
+     * left on the old domain does not fail: it renders the KEY, in full, in the page. That
+     * shipped twice in this ecosystem, and both times a screen test found it months later by
+     * looking for a translated word in the HTML.
+     *
+     * Only keys the browser domain holds ALONE are checked. A key both catalogues define is
+     * ambiguous by construction, and reporting it would make the guard cry wolf on the very
+     * vocabulary a project chose to keep in two places.
+     *
+     * It skips itself while {@see self::serverDirectories()} is empty — the same way the
+     * attribute guard does, so a project mid-migration keeps a green suite.
+     */
+    public function testNoServerCallerAsksTheWrongDomain(): void
+    {
+        $directories = static::serverDirectories();
+
+        if ([] === $directories) {
+            self::markTestSkipped('Declare serverDirectories() to guard the server-side callers of the domain.');
+        }
+
+        $offenders = new ServerDomainScanner(static::domain())->scan($this->exclusiveKeys(), $directories);
+
+        self::assertSame([], $offenders, \sprintf(
+            "These call sites ask for a key of the \"%s\" domain in another catalogue.\n"
+            ."A wrong domain does not fail — it renders the key, in full, in the page:\n  - %s",
+            static::domain(),
+            implode("\n  - ", $offenders),
+        ));
+    }
+
+    /**
+     * Server-side code checked by {@see self::testNoServerCallerAsksTheWrongDomain()} — the
+     * templates and the PHP that render the same vocabulary the browser reads.
+     *
+     * @return list<string>
+     */
+    protected static function serverDirectories(): array
+    {
+        return [];
+    }
+
+    /**
+     * The keys the browser domain holds and no other catalogue does, in the first locale served.
+     *
+     * ⚠️ One locale is enough, and more would be misleading: a key present in `javascript.fr`
+     * and in `messages.en` is a catalogue that has drifted, which is
+     * {@see self::testEveryKeyReadByJavaScriptIsTranslated()}'s business, not this guard's.
+     *
+     * @return list<string>
+     */
+    private function exclusiveKeys(): array
+    {
+        self::bootKernel();
+
+        $translator = static::getContainer()->get('translator');
+        self::assertInstanceOf(TranslatorBagInterface::class, $translator);
+
+        $locales = static::locales();
+        self::assertNotEmpty($locales, 'Set framework.enabled_locales, or override locales().');
+
+        $catalogue = $translator->getCatalogue($locales[0]);
+        $domain = static::domain();
+        $elsewhere = [];
+
+        foreach ($catalogue->getDomains() as $other) {
+            // ⚠️ `MessageCatalogueInterface::getDomains()` ne promet qu'un `array` : rien sur le
+            // type de ses éléments. La vérification n'est pas décorative — c'est le seul endroit
+            // où un type entre dans ce garde, et le seul où l'interface ne le garantit pas.
+            if (!\is_string($other) || $other === $domain) {
+                continue;
+            }
+
+            $elsewhere += $catalogue->all($other);
+        }
+
+        return array_values(array_diff(array_keys($catalogue->all($domain)), array_keys($elsewhere)));
     }
 
     /**
