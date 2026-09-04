@@ -1,0 +1,4 @@
+datatable:
+    filters: Filtres
+    error:
+        saving: Enregistrement impossible

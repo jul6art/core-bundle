@@ -3,4 +3,5 @@
 /.phpunit.cache/
 /.phpunit.result.cache
 /composer.lock
+/var/
 /vendor/

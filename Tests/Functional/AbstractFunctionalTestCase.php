@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\Tests\Functional;
 
+use Jul6Art\CoreBundle\Tests\Fixtures\RestoresExceptionHandlerTrait;
 use Jul6Art\CoreBundle\Tests\Fixtures\TestKernel;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\ErrorHandler\ErrorHandler;
 
 abstract class AbstractFunctionalTestCase extends TestCase
 {
+    use RestoresExceptionHandlerTrait;
+
     private ?TestKernel $kernel = null;
 
     #[\Override]
@@ -31,29 +33,20 @@ abstract class AbstractFunctionalTestCase extends TestCase
      * share a compiled container, while identical scenarios still reuse the cache.
      *
      * @param array<string, mixed> $coreConfig
+     * @param array<string, mixed> $uxTranslatorConfig
      */
-    final protected function boot(string $environment = 'test', array $coreConfig = [], bool $withOrm = false): ContainerInterface
-    {
-        $uniqueId = substr(md5(serialize([$coreConfig, $withOrm])), 0, 12);
+    final protected function boot(
+        string $environment = 'test',
+        array $coreConfig = [],
+        bool $withOrm = false,
+        bool $withUxTranslator = false,
+        array $uxTranslatorConfig = [],
+    ): ContainerInterface {
+        $uniqueId = substr(md5(serialize([$coreConfig, $withOrm, $withUxTranslator, $uxTranslatorConfig])), 0, 12);
 
-        $this->kernel = new TestKernel($environment, $coreConfig, $withOrm, $uniqueId);
+        $this->kernel = new TestKernel($environment, $coreConfig, $withOrm, $uniqueId, $withUxTranslator, $uxTranslatorConfig);
         $this->kernel->boot();
 
         return $this->kernel->getContainer();
-    }
-
-    /**
-     * FrameworkBundle::boot() calls ErrorHandler::register(), which leaves one
-     * exception handler on the stack. Booting is our own side effect, so we pop it
-     * back off instead of letting PHPUnit report leaked global state.
-     */
-    private static function restoreSymfonyExceptionHandler(): void
-    {
-        $handler = set_exception_handler(null);
-        restore_exception_handler();
-
-        if (\is_array($handler) && $handler[0] instanceof ErrorHandler) {
-            restore_exception_handler();
-        }
     }
 }

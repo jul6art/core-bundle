@@ -43,6 +43,8 @@ feature:
 | `Controller\AbstractController` (et `addFormError()`) | `composer require symfony/framework-bundle symfony/form` |
 | `Controller\BulkActionRunner` | `composer require symfony/security-csrf` (le service n'est enregistré que si le gestionnaire de jetons existe) |
 | `Controller\BulkActionRunner` | `composer require symfony/security-csrf` (and the ORM) |
+| `core.js_translations` (the `javascript` domain reaching the browser) | `composer require symfony/ux-translator` |
+| `Command\JsTranslationAuditCommand` (`core:i18n:js-audit`) | `composer require symfony/console` |
 
 Start server
 ------------
@@ -276,6 +278,172 @@ What you get:
 
 The bundle ships **no route and no page**: `jul6art/admin-bundle` provides the dashboard for
 back-office projects, and any application can render `DashboardViewBuilder::build()` its own way.
+
+JavaScript translations
+-----------------------
+
+The bridge to [`symfony/ux-translator`](https://symfony.com/bundles/ux-translator/current/index.html),
+and the one convention it enforces: **the browser sees a single translation domain**, `javascript`.
+
+### Why
+
+Before this, a label reached JavaScript through a tree built in Twig and walked in JS — an
+attribute on the page, one `|trans` per key, a `t('a.b.c')` on the other side. Nothing tied the
+two halves together, so nothing could tell when they drifted. The ecosystem shipped a defect for
+months because of it: a datatable controller read `bulk.select_all` while its Twig partial sent
+`datatable.bulk.select_all`, and every bulk-selection checkbox of three back-offices carried the
+literal string `bulk.select_all` as its aria-label. The bundle's own test looked at each half in
+its own file and stayed green throughout.
+
+Dumping the catalogue makes the JS key **the same string** as the catalogue key, which is what
+lets one test hold both ends.
+
+### Install it in a project
+
+```shell
+composer require symfony/ux-translator
+```
+
+**With AssetMapper** (the `web` and `admin` modes of the skeleton) there is nothing else to do:
+the package declares its own asset paths.
+
+**With Webpack Encore** (`cereezer`, `cegeta`, `superp`, `devinlive`, the `backoffice` mode), add
+the alias and the peer dependency:
+
+```js
+// webpack.config.js
+.addAliases({
+    '@symfony/ux-translator': path.resolve(__dirname, 'vendor/symfony/ux-translator/assets/dist/translator_controller.js'),
+})
+```
+
+```shell
+npm i intl-messageformat@^10.5.11   # ⚠️ ^10, not ^11: that is what the package peers on
+```
+
+### Configure
+
+Nothing to write — the defaults are the convention:
+
+```yaml
+# config/packages/core.yaml
+core:
+    js_translations:
+        enabled: true                                        # inert until ux-translator is installed
+        domain: javascript                                   # THE domain the browser sees
+        dump_directory: '%kernel.project_dir%/var/translations'
+```
+
+`CoreExtension::prepend()` turns that into the `ux_translator` configuration, and disables the
+TypeScript dump in production. An application that wants something else says so in
+`config/packages/ux_translator.yaml`, which is merged **after** and therefore wins.
+
+> ⚠️ `javascript` is a domain of **transport**, not of subject. The other domains of a project
+> answer "what is this label about"; this one answers "who reads it". That is why an enum's
+> labels — read by a Twig template, a form's `choice_label` **and** a datatable renderer — are
+> *moved* into it rather than duplicated: two copies of one label diverge the day one changes.
+
+### Wire the front end
+
+The package's recipe writes `assets/translator.js`. Add one line to it, and one to the entry
+point:
+
+```js
+// assets/translator.js
+import { createTranslator } from '@symfony/ux-translator';
+import { messages, localeFallbacks } from '../var/translations/index.js';
+
+const translator = createTranslator({ messages, localeFallbacks });
+
+// ⚠️ The domain is fixed HERE. `domains: javascript` restricts what is DUMPED; it does not
+// change the default domain of `trans()`, which stays `messages`. An unqualified call finds
+// nothing and returns the raw key — silently.
+export const trans = (key, parameters = {}) => translator.trans(key, parameters, 'javascript');
+```
+
+```js
+// assets/app.js
+import { trans } from './translator';
+import { registerTranslator } from '@jul6art/core-bundle/i18n/registry';
+
+registerTranslator(trans);
+```
+
+That last line is what lets a Stimulus controller shipped inside `vendor/jul6art/<bundle>/assets`
+translate at all: it cannot import the project's `translator.js`, because the path out of
+`vendor/` does not exist. It reads through the registry instead.
+
+| Module | What it gives |
+| --- | --- |
+| `@jul6art/core-bundle/i18n/registry` | `registerTranslator(fn)`, `t(key, parameters)`, `hasTranslator()` |
+| `@jul6art/core-bundle/mixins/translatable` | `translatableValues`, `useTranslatable(controller)` — a Stimulus controller gets `this.t()` |
+
+> ⚠️ The mixin resolves a key against the controller's `translations` value **first**, and only
+> then against the registry. That order is what makes a migration possible one template at a
+> time: while a template still ships `data-…-translations-value`, its tree answers; the day the
+> attribute goes, the catalogue does — and no controller changes in between. The attribute is a
+> transitional path, not a feature.
+
+### Guard it
+
+```php
+final class JsTranslationTest extends AbstractJsTranslationTestCase
+{
+    protected static function javaScriptDirectories(): array
+    {
+        return [
+            self::projectDir().'/assets',
+            // ⚠️ The bundles too: their controllers read keys THIS catalogue must hold.
+            self::projectDir().'/vendor/jul6art/datatable-bundle/assets',
+        ];
+    }
+
+    // Keys no scanner can see — an enum read as `t(`datatable.work_order_status.${value}`)`.
+    protected static function declaredKeys(): array
+    {
+        return array_map(static fn (WorkOrderStatus $c): string => $c->translationKey(), WorkOrderStatus::cases());
+    }
+
+    // Declare these once the last data-…-translations-value is gone; the guard skips itself until then.
+    protected static function templateDirectories(): array
+    {
+        return [self::projectDir().'/templates'];
+    }
+}
+```
+
+It asserts three things: every key the JavaScript reads is translated **in every enabled locale**,
+no key of the domain is read by nothing, and no template hands labels over through an HTML
+attribute any more.
+
+The same audit, while you work:
+
+```shell
+bin/console core:i18n:js-audit assets vendor/jul6art/datatable-bundle/assets
+```
+
+| Class | Role |
+| --- | --- |
+| `Translation\JsTranslationScanner` | reads `t(…)` / `trans(…)` out of JavaScript — literals, template-literal prefixes, and the calls it cannot resolve |
+| `Translation\JsTranslationAudit` | confronts them with the catalogue, in both directions |
+| `Translation\JsTranslationReport` | what is missing, what is dead, what could not be read |
+| `Test\AbstractJsTranslationTestCase` | the guard a project extends |
+| `core:i18n:js-audit` | the same, from the console |
+
+### Three things that cost an afternoon each
+
+1. ⚠️ **`var/translations/index.js` must exist before the front-end build.** It is an import of
+   `assets/translator.js`, and it is written by the cache warm-up. On a fresh machine, in CI and
+   on deploy the order is `composer install` → `cache:warmup` → `npm run build`. `/var/` is
+   gitignored, so nothing saves you.
+2. ⚠️ **The UX warmer dumps `TranslatorBagInterface::getCatalogues()`, which returns the
+   catalogues already loaded.** Run it on a cold translator and you get
+   `export const messages = {};` — a valid file, an empty catalogue, no error anywhere. The
+   framework's own translator warm-up has to run first, which is what `cache:warmup` does and
+   what a hand-rolled script forgets.
+3. ⚠️ **A missing key returns the key**, here as in `ux-translator` as in the mixin it replaces.
+   That is deliberate — a half-finished migration degrades to a visible key rather than a blank
+   screen — but it means the guard, not the browser, is what tells you the migration is done.
 
 Service traits
 --------------

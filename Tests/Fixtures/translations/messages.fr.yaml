@@ -1,0 +1,3 @@
+# Le domaine que le navigateur ne doit JAMAIS recevoir : il sert de témoin.
+page:
+    title: Titre de la page

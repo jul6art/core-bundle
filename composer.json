@@ -49,17 +49,20 @@
         "symfony/phpunit-bridge": "^7.4 || ^8.0",
         "symfony/twig-bridge": "^7.4 || ^8.0",
         "symfony/twig-bundle": "^7.4 || ^8.0",
+        "symfony/ux-translator": "^3.4",
         "symfony/var-dumper": "^7.4 || ^8.0",
         "twig/twig": "^3.0"
     },
     "suggest": {
         "ext-sodium": "Required by Security\\Encryptor and the encrypted_string DBAL type (core.encryption_key)",
         "fakerphp/faker": "Required by the FakerAwareTrait (data fixtures)",
+        "symfony/console": "Required by core:purge and core:i18n:js-audit",
         "symfony/form": "Required by AbstractController::addFormError() and Form\\Extension\\NumberTypeGroupingExtension",
         "symfony/framework-bundle": "Required by Controller\\AbstractController (extends its own AbstractController)",
         "symfony/mailer": "Required by the email_debug handler (Monolog symfony_mailer type)",
         "symfony/monolog-bundle": "To enable the prod logging and the email_debug handlers configured by this bundle",
-        "symfony/security-csrf": "Required by Controller\\BulkActionRunner — no token manager, no service"
+        "symfony/security-csrf": "Required by Controller\\BulkActionRunner — no token manager, no service",
+        "symfony/ux-translator": "Dumps the `javascript` translation domain for the browser; core.js_translations configures it"
     },
     "autoload": {
         "psr-4": {

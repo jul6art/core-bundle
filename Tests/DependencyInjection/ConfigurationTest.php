@@ -30,6 +30,15 @@ final class ConfigurationTest extends TestCase
             'email_debug_title' => 'An error occured',
             'email_debug_to' => null,
             'flash' => ['default_domain' => 'messages', 'domain_map' => []],
+            // ⚠️ ALLUMÉ par défaut, contrairement au profileur et aux en-têtes de sécurité — et
+            // c'est cohérent : la clé ne fait RIEN tant que `symfony/ux-translator` n'est pas
+            // installé. Le jour où un projet l'installe, il veut la convention de l'écosystème,
+            // pas le défaut du paquet qui déverse tous les domaines dans le navigateur.
+            'js_translations' => [
+                'enabled' => true,
+                'domain' => 'javascript',
+                'dump_directory' => '%kernel.project_dir%/var/translations',
+            ],
             'number_format' => [
                 'decimal_separator' => ',',
                 'thousands_separator' => "\u{00A0}",

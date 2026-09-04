@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
+use Jul6Art\CoreBundle\Command\JsTranslationAuditCommand;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Controller\BulkActionRunner;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
@@ -83,6 +84,31 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerFlashTranslator($container, \is_array($config['flash'] ?? null) ? $config['flash'] : []);
         $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
         $this->registerPerformance($container, \is_array($config['performance'] ?? null) ? $config['performance'] : []);
+        $this->registerJsTranslationAudit($container);
+    }
+
+    /**
+     * The audit command. Needs symfony/console, which this bundle only suggests.
+     *
+     * ⚠️ It is registered whether or not `symfony/ux-translator` is installed: a project migrating
+     * TO the single domain has to be able to see what is left to move BEFORE it installs the
+     * package, and that is the moment the command earns its keep.
+     */
+    private function registerJsTranslationAudit(ContainerBuilder $container): void
+    {
+        if (!class_exists(Command::class)) {
+            return;
+        }
+
+        $container->register(JsTranslationAuditCommand::class, JsTranslationAuditCommand::class)
+            ->setArguments([
+                new Reference('translator'),
+                '%kernel.project_dir%',
+                '%core.js_translations.domain%',
+                '%kernel.enabled_locales%',
+            ])
+            ->addTag('console.command')
+            ->setPublic(true);
     }
 
     /**
@@ -417,6 +443,8 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             $container->setParameter(\sprintf('%s.%s', $this->getAlias(), $key), $parameter);
         }
 
+        $this->prependJsTranslations($container);
+
         $bundles = $container->getParameter('kernel.bundles');
 
         if (!\is_array($bundles) || !isset($bundles['MonologBundle'])) {
@@ -432,6 +460,81 @@ class CoreExtension extends Extension implements PrependExtensionInterface
                 'handlers' => $this->buildEmailDebugHandlers($container, $config),
             ]);
         }
+    }
+
+    /**
+     * Teaches `symfony/ux-translator` the one convention this ecosystem holds to: the browser
+     * sees a single translation domain, `javascript`.
+     *
+     * ## Why the socle decides this and not each project
+     *
+     * The package's default dumps EVERY domain of the catalogue into the JavaScript bundle. On a
+     * back-office that is 5 955 keys in `superp`, in every locale it serves — and nobody notices,
+     * because nothing breaks. Left to four projects, the line would be written four times and
+     * drift three.
+     *
+     * ⚠️ The domain is a domain of TRANSPORT, not of subject. The other twenty-odd domains answer
+     * "what is this label about"; this one answers "who reads it". Mixing the two criteria is
+     * exactly why an enum's labels — read by a Twig template, a form's choice_label AND a
+     * datatable renderer — have to be moved rather than duplicated.
+     *
+     * ⚠️ The parameters are set whatever happens, including when `symfony/ux-translator` is not
+     * installed: the audit command and `AbstractJsTranslationTestCase` need to know the domain in
+     * order to guard a project that has not migrated yet.
+     *
+     * ⚠️ And nothing is prepended when UxTranslatorBundle is absent. Prepending configuration for
+     * an extension the kernel does not have blows the container up at boot, and most applications
+     * of this ecosystem take this bundle for its entities alone.
+     */
+    private function prependJsTranslations(ContainerBuilder $container): void
+    {
+        $config = $this->resolveJsTranslationsConfig($container);
+
+        $container->setParameter('core.js_translations.domain', $config['domain']);
+        $container->setParameter('core.js_translations.dump_directory', $config['dump_directory']);
+
+        $bundles = $container->getParameter('kernel.bundles');
+
+        if (!$config['enabled'] || !\is_array($bundles) || !isset($bundles['UxTranslatorBundle'])) {
+            return;
+        }
+
+        $container->prependExtensionConfig('ux_translator', [
+            'dump_directory' => $config['dump_directory'],
+            // A bare string: the package normalises it into an inclusive single-element list.
+            'domains' => $config['domain'],
+            // ⚠️ The `.d.ts` is dumped on every cache warm-up, so on every deploy, and nothing
+            // reads it in production.
+            'dump_typescript' => 'prod' !== $container->getParameter('kernel.environment'),
+        ]);
+    }
+
+    /**
+     * Read by hand for the same reason {@see self::resolveConfig()} is: prepend() runs before
+     * `%env(...)%` placeholders exist, and running the config tree here would reject a perfectly
+     * legal one. load() validates the whole tree properly.
+     *
+     * @return array{enabled: bool, domain: string, dump_directory: string}
+     */
+    private function resolveJsTranslationsConfig(ContainerBuilder $container): array
+    {
+        $configs = $container->getExtensionConfig($this->getAlias());
+        $merged = [];
+
+        foreach ($configs as $candidate) {
+            if (\is_array($candidate) && \is_array($candidate['js_translations'] ?? null)) {
+                $merged = [...$merged, ...$candidate['js_translations']];
+            }
+        }
+
+        $domain = $merged['domain'] ?? null;
+        $directory = $merged['dump_directory'] ?? null;
+
+        return [
+            'enabled' => false !== ($merged['enabled'] ?? true),
+            'domain' => \is_string($domain) && '' !== $domain ? $domain : 'javascript',
+            'dump_directory' => \is_string($directory) && '' !== $directory ? $directory : '%kernel.project_dir%/var/translations',
+        ];
     }
 
     /**

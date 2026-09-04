@@ -16,7 +16,9 @@ parameters:
         - Repository
         - Security
         - Service
+        - Test
         - Tests
+        - Translation
         - Util
         - rector.php
     treatPhpDocTypesAsCertain: false

@@ -41,6 +41,7 @@ use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\BundleInterface;
 use Symfony\Component\HttpKernel\Kernel;
+use Symfony\UX\Translator\UxTranslatorBundle;
 
 /**
  * Minimal application kernel used by the functional tests.
@@ -52,14 +53,20 @@ final class TestKernel extends Kernel
     public const string AWARE_SERVICE_ID = 'test.aware_service';
 
     /**
-     * @param array<string, mixed> $coreConfig configuration for the "core" extension
-     * @param bool                 $withOrm    registers an in-memory SQLite ORM mapped on the fixtures
+     * @param array<string, mixed> $coreConfig         configuration for the "core" extension
+     * @param bool                 $withOrm            registers an in-memory SQLite ORM mapped on the fixtures
+     * @param bool                 $withUxTranslator   registers UxTranslatorBundle, so CoreExtension::prepend()
+     *                                                 has something to prepend to
+     * @param array<string, mixed> $uxTranslatorConfig application-level configuration, loaded AFTER the
+     *                                                 prepend — which is how a project overrides the socle
      */
     public function __construct(
         string $environment,
         private readonly array $coreConfig = [],
         private readonly bool $withOrm = false,
         private readonly string $uniqueId = 'default',
+        private readonly bool $withUxTranslator = false,
+        private readonly array $uxTranslatorConfig = [],
     ) {
         // Debug mode installs Symfony's error handler and never removes it, which
         // PHPUnit rightly reports as leaking global state. The bundle behaves the
@@ -78,6 +85,10 @@ final class TestKernel extends Kernel
         yield new MonologBundle();
         yield new TwigBundle();
         yield new CoreBundle();
+
+        if ($this->withUxTranslator) {
+            yield new UxTranslatorBundle();
+        }
 
         if ($this->withOrm) {
             yield new DoctrineBundle();
@@ -145,6 +156,9 @@ final class TestKernel extends Kernel
                     'lock.factory',
                     'security.authorization_checker',
                     'security.helper',
+                    // The UX translator's cache warmer is @internal, and its work is a file on
+                    // disk: the only way to assert on what the socle configured is to run it.
+                    'ux.translator.cache_warmer.translations_cache_warmer',
                 ];
 
                 foreach ($container->getDefinitions() as $id => $definition) {
@@ -162,6 +176,31 @@ final class TestKernel extends Kernel
         }, PassConfig::TYPE_BEFORE_REMOVING, 100);
     }
 
+    /**
+     * ⚠️ The dump directory is forced into the temp tree whenever UxTranslatorBundle is on.
+     * Its default is `%kernel.project_dir%/var/translations`, and this kernel's project dir is
+     * the BUNDLE — so running the suite wrote `var/translations/index.js` into the repository,
+     * where it was promptly committed. The default itself is covered by ConfigurationTest.
+     *
+     * @return array<string, mixed>
+     */
+    private function coreConfig(): array
+    {
+        if (!$this->withUxTranslator) {
+            return $this->coreConfig;
+        }
+
+        $jsTranslations = \is_array($this->coreConfig['js_translations'] ?? null) ? $this->coreConfig['js_translations'] : [];
+
+        return [
+            ...$this->coreConfig,
+            'js_translations' => [
+                'dump_directory' => $this->buildDir().'/translations',
+                ...$jsTranslations,
+            ],
+        ];
+    }
+
     private function buildDir(): string
     {
         return \sprintf('%s/jul6art-core-bundle-tests/%s/%s', sys_get_temp_dir(), $this->uniqueId, $this->environment);
@@ -174,7 +213,14 @@ final class TestKernel extends Kernel
             'http_method_override' => false,
             'handle_all_throwables' => true,
             'php_errors' => ['log' => true],
-            'translator' => ['default_path' => '%kernel.project_dir%/translations'],
+            // ⚠️ `enabled_locales` is not decoration here. Without it the translator warms only
+            // its fallbacks plus the current locale, and the UX translator dumps whatever
+            // happens to be loaded — a dump that changes with the order of the tests.
+            'enabled_locales' => ['en', 'fr'],
+            'translator' => [
+                'default_path' => '%kernel.project_dir%/translations',
+                'paths' => ['%kernel.project_dir%/Tests/Fixtures/translations'],
+            ],
             'session' => ['storage_factory_id' => 'session.storage.factory.mock_file'],
             // Le routeur, sans route : le panneau du profileur utilise `path()`, et un gabarit
             // ne se prouve qu'en le compilant — ce qui exige que la fonction existe.
@@ -207,7 +253,21 @@ final class TestKernel extends Kernel
         // filter that exists but never reaches a template is the failure this guards against.
         $container->loadFromExtension('twig', ['default_path' => '%kernel.project_dir%/Tests/Fixtures/views']);
 
-        $container->loadFromExtension('core', $this->coreConfig);
+        $container->loadFromExtension('core', $this->coreConfig());
+
+        // Loaded after `core`, hence after its prepend: this is the application having the last
+        // word, exactly as `config/packages/ux_translator.yaml` does.
+        //
+        // ⚠️ The dump directory is pinned here whatever the scenario, including the one that
+        // disables the socle: with `js_translations.enabled: false` nothing is prepended, the
+        // package falls back to `%kernel.project_dir%/var/translations` — the BUNDLE — and the
+        // suite writes into the repository.
+        if ($this->withUxTranslator) {
+            $container->loadFromExtension('ux_translator', [
+                'dump_directory' => $this->buildDir().'/translations',
+                ...$this->uxTranslatorConfig,
+            ]);
+        }
 
         // Concrete children of the bundle's abstract definitions: this is what proves
         // the `calls:` in Resources/config/services.yaml reference existing services.

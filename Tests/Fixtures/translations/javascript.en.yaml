@@ -1,0 +1,4 @@
+datatable:
+    filters: Filters
+    error:
+        saving: Could not save
