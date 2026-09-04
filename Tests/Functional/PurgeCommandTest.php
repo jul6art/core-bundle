@@ -70,6 +70,51 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
         self::assertStringContainsString('1 entities purged', $tester->getDisplay());
     }
 
+    /**
+     * ⚠️ La purge tourne la nuit, sur trois ans de lignes, sans personne pour la regarder : elle
+     * doit tenir en MÉMOIRE CONSTANTE. Le lot ne suffit pas à le garantir — un `flush()` par
+     * paquet vide les suppressions en attente, pas l'unité de travail, et les entités hydratées
+     * s'y accumulent jusqu'à la dernière.
+     *
+     * Le test mesure donc la taille de l'unité de travail À CHAQUE `flush()` : avec un
+     * chargement en une fois, elle porte les dix lignes dès le premier ; par lots, elle n'en
+     * porte jamais plus que la taille du paquet.
+     */
+    public function testThePurgeNeverHoldsMoreThanOneBatchInMemory(): void
+    {
+        for ($i = 0; $i < 10; ++$i) {
+            $this->log('-4 months');
+        }
+
+        $this->entityManager->clear();
+
+        $probe = new class {
+            /** @var list<int> */
+            public array $sizes = [];
+
+            public function postFlush(\Doctrine\ORM\Event\PostFlushEventArgs $args): void
+            {
+                $this->sizes[] = $args->getObjectManager()->getUnitOfWork()->size();
+            }
+        };
+        $this->entityManager->getEventManager()->addEventListener([\Doctrine\ORM\Events::postFlush], $probe);
+
+        $tester = $this->runPurge([]);
+
+        self::assertSame(0, $this->countRows('purgeable_log'));
+        self::assertNotSame([], $probe->sizes, 'La purge doit avoir vidé au moins une fois.');
+        self::assertLessThanOrEqual(
+            3,
+            max($probe->sizes),
+            \sprintf(
+                "L'unité de travail a porté %d entités à la fois pour un lot de 3 : la purge charge "
+                .'tout en mémoire avant de supprimer.',
+                max($probe->sizes),
+            ),
+        );
+        self::assertStringContainsString('10 entities purged', $tester->getDisplay());
+    }
+
     public function testAnEntityWithoutAPolicyIsNeverTouched(): void
     {
         $this->entityManager->persist(new Widget('kept'));

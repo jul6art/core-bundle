@@ -134,6 +134,18 @@ final class PurgeCommand extends Command
     }
 
     /**
+     * ⚠️ The rows are read ONE BATCH AT A TIME, and this is the whole point of the method.
+     *
+     * A single `getResult()` hydrates every expired row before deleting the first one: on three
+     * years of notifications that is an out-of-memory error, at night, with nobody watching.
+     * Flushing every `n` rows does not help — a flush empties the pending deletes, not the unit
+     * of work, and the hydrated entities pile up until the last one.
+     *
+     * The cursor is the identifier (`e.id > :lastId`), not an offset: `LIMIT/OFFSET` walks past
+     * rows that the previous batch has just deleted, and every batch would skip as many rows as
+     * it removed. The cursor also makes `--dry-run` terminate — nothing is deleted there, so an
+     * unmoved window would loop forever.
+     *
      * @param class-string $className
      */
     private function purgeOne(
@@ -144,55 +156,53 @@ final class PurgeCommand extends Command
         ?ExpressionLanguage $expressionLanguage,
         bool $dryRun,
     ): int {
-        $entities = $this->entityManager->createQueryBuilder()
-            ->select('e')
-            ->from($className, 'e')
-            ->where(\sprintf('e.%s < :threshold', $purgeable->field))
-            ->setParameter('threshold', new \DateTimeImmutable($purgeable->interval))
-            ->orderBy('e.id', 'ASC')
-            ->getQuery()
-            ->getResult();
-
-        if (!\is_array($entities)) {
-            return 0;
-        }
-
+        $threshold = new \DateTimeImmutable($purgeable->interval);
         $count = 0;
-        /** @var list<array{id: int|string|null, organizationId: int|null}> $purged */
-        $purged = [];
+        $lastId = null;
 
-        foreach ($entities as $entity) {
-            if (!\is_object($entity)) {
-                continue;
+        while (true) {
+            $batch = $this->batch($className, $purgeable->field, $threshold, $lastId);
+
+            if ([] === $batch) {
+                break;
             }
 
-            if ('' !== $purgeable->condition
-                && null !== $expressionLanguage
-                && true !== (bool) $expressionLanguage->evaluate($purgeable->condition, ['entity' => $entity])
-            ) {
-                continue;
+            /** @var list<array{id: int|string|null, organizationId: int|null}> $purged */
+            $purged = [];
+
+            foreach ($batch as $entity) {
+                // Read before anything else: the cursor must advance even on a row the
+                // condition keeps, otherwise the next batch reads the same window forever.
+                $lastId = self::identifierOf($entity);
+
+                if ('' !== $purgeable->condition
+                    && null !== $expressionLanguage
+                    && true !== (bool) $expressionLanguage->evaluate($purgeable->condition, ['entity' => $entity])
+                ) {
+                    continue;
+                }
+
+                ++$count;
+
+                if ($dryRun) {
+                    $io->text(\sprintf('  [DRY-RUN] Would purge %s#%s', $shortName, $lastId ?? '?'));
+
+                    continue;
+                }
+
+                // Collected before the remove: once flushed the entity is detached, and the
+                // event has to name a row that no longer exists.
+                $purged[] = ['id' => $lastId, 'organizationId' => self::organizationOf($entity)];
+                $this->entityManager->remove($entity);
             }
 
-            ++$count;
-
-            if ($dryRun) {
-                $io->text(\sprintf('  [DRY-RUN] Would purge %s#%s', $shortName, self::identifierOf($entity) ?? '?'));
-
-                continue;
-            }
-
-            // Collected before the remove: once flushed the entity is detached, and the
-            // event has to name a row that no longer exists.
-            $purged[] = ['id' => self::identifierOf($entity), 'organizationId' => self::organizationOf($entity)];
-            $this->entityManager->remove($entity);
-
-            if (0 === $count % $this->batchSize) {
+            if (!$dryRun && [] !== $purged) {
                 $this->entityManager->flush();
             }
-        }
 
-        if (!$dryRun && $count > 0) {
-            $this->entityManager->flush();
+            // The batch is gone from memory here, and only here: the events below carry
+            // scalars, never the entities they name.
+            $this->entityManager->clear();
 
             foreach ($purged as $row) {
                 $this->eventDispatcher->dispatch(
@@ -222,6 +232,32 @@ final class PurgeCommand extends Command
         }
 
         return $count;
+    }
+
+    /**
+     * One window of expired rows, ordered by identifier and starting after the last one seen.
+     *
+     * @param class-string $className
+     *
+     * @return list<object>
+     */
+    private function batch(string $className, string $field, \DateTimeImmutable $threshold, int|string|null $lastId): array
+    {
+        $builder = $this->entityManager->createQueryBuilder()
+            ->select('e')
+            ->from($className, 'e')
+            ->where(\sprintf('e.%s < :threshold', $field))
+            ->setParameter('threshold', $threshold)
+            ->orderBy('e.id', 'ASC')
+            ->setMaxResults($this->batchSize);
+
+        if (null !== $lastId) {
+            $builder->andWhere('e.id > :lastId')->setParameter('lastId', $lastId);
+        }
+
+        $rows = $builder->getQuery()->getResult();
+
+        return \is_array($rows) ? array_values(array_filter($rows, \is_object(...))) : [];
     }
 
     private static function identifierOf(object $entity): int|string|null
