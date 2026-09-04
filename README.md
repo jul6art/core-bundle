@@ -404,6 +404,13 @@ final class JsTranslationTest extends AbstractJsTranslationTestCase
         return array_map(static fn (WorkOrderStatus $c): string => $c->translationKey(), WorkOrderStatus::cases());
     }
 
+    // A weaker promise: alive, but not required. The confirmation modals of datatable-bundle
+    // read `datatable.modal.<action>.<field>` and fall back to a generic text when it is absent.
+    protected static function declaredPrefixes(): array
+    {
+        return static::getContainer()->get(DeclaredTranslationKeys::class)->prefixes();
+    }
+
     // Declare these once the last data-…-translations-value is gone; the guard skips itself until then.
     protected static function templateDirectories(): array
     {

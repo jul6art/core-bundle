@@ -33,12 +33,20 @@ final readonly class JsTranslationAudit
     }
 
     /**
-     * @param list<string> $locales      every locale the application serves — not just the default
-     * @param list<string> $declaredKeys keys the project vouches for without the scanner seeing
-     *                                   them, typically an enum's cases. They are expected to
-     *                                   exist, and they are never reported as dead
+     * @param list<string> $locales          every locale the application serves — not just the default
+     * @param list<string> $declaredKeys     keys the project vouches for without the scanner seeing
+     *                                       them, typically an enum's cases. They are expected to
+     *                                       exist, and they are never reported as dead
+     * @param list<string> $declaredPrefixes a weaker promise: everything under the prefix is
+     *                                       alive, and nothing under it is required. ⚠️ The
+     *                                       confirmation modals of `datatable-bundle` read
+     *                                       `datatable.modal.<action>.<field>` and fall back to a
+     *                                       generic text when the key is absent — the absence is
+     *                                       designed. As keys, every type a project leaves
+     *                                       generic would be reported missing; declared nowhere,
+     *                                       every type it customises would be reported dead
      */
-    public function audit(JsTranslationScan $scan, array $locales, array $declaredKeys = []): JsTranslationReport
+    public function audit(JsTranslationScan $scan, array $locales, array $declaredKeys = [], array $declaredPrefixes = []): JsTranslationReport
     {
         $expected = [...$scan->keys(), ...$declaredKeys];
         sort($expected);
@@ -46,7 +54,7 @@ final readonly class JsTranslationAudit
 
         return new JsTranslationReport(
             $this->missing($expected, $locales),
-            $this->unused($scan, $locales, $declaredKeys),
+            $this->unused($scan, $locales, $declaredKeys, $declaredPrefixes),
             $scan->dynamicCalls(),
             $scan,
         );
@@ -81,10 +89,11 @@ final readonly class JsTranslationAudit
     /**
      * @param list<string> $locales
      * @param list<string> $declaredKeys
+     * @param list<string> $declaredPrefixes
      *
      * @return list<string>
      */
-    private function unused(JsTranslationScan $scan, array $locales, array $declaredKeys): array
+    private function unused(JsTranslationScan $scan, array $locales, array $declaredKeys, array $declaredPrefixes): array
     {
         $unused = [];
 
@@ -93,7 +102,7 @@ final readonly class JsTranslationAudit
             $messages = $this->translator->getCatalogue($locale)->all($this->domain);
 
             foreach (array_keys($messages) as $key) {
-                if (!$scan->covers($key) && !\in_array($key, $declaredKeys, true)) {
+                if (!$scan->covers($key) && !\in_array($key, $declaredKeys, true) && !self::underAnyPrefix($key, $declaredPrefixes)) {
                     $unused[$key] = true;
                 }
             }
@@ -103,5 +112,19 @@ final readonly class JsTranslationAudit
         sort($unused);
 
         return $unused;
+    }
+
+    /**
+     * @param list<string> $prefixes
+     */
+    private static function underAnyPrefix(string $key, array $prefixes): bool
+    {
+        foreach ($prefixes as $prefix) {
+            if ('' !== $prefix && str_starts_with($key, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

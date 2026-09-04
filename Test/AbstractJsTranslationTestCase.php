@@ -130,6 +130,23 @@ abstract class AbstractJsTranslationTestCase extends KernelTestCase
     }
 
     /**
+     * A weaker promise than {@see self::declaredKeys()}: everything under the prefix is alive,
+     * and nothing under it is required.
+     *
+     * ⚠️ For keys a controller reads *optionally*. The confirmation modals of `datatable-bundle`
+     * look up `datatable.modal.<action>.<field>` and fall back to a generic text when it is
+     * absent — the absence is designed. Declared as keys, every action type a project leaves
+     * generic would be reported missing; declared nowhere, every type it customises would be
+     * reported dead.
+     *
+     * @return list<string>
+     */
+    protected static function declaredPrefixes(): array
+    {
+        return [];
+    }
+
+    /**
      * Templates checked by {@see self::testNoTemplateStillShipsATranslationsAttribute()}.
      *
      * @return list<string>
@@ -194,7 +211,8 @@ abstract class AbstractJsTranslationTestCase extends KernelTestCase
 
         $scan = new JsTranslationScanner()->scan(...$directories);
 
-        return new JsTranslationAudit($translator, static::domain())->audit($scan, $locales, static::declaredKeys());
+        return new JsTranslationAudit($translator, static::domain())
+            ->audit($scan, $locales, static::declaredKeys(), static::declaredPrefixes());
     }
 
     /**

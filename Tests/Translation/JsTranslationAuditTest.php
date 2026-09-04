@@ -109,6 +109,37 @@ final class JsTranslationAuditTest extends TestCase
         self::assertSame(['datatable.work_order_status.done' => ['fr']], $report->missing());
     }
 
+    /**
+     * A prefix the project vouches for: everything under it is alive, and nothing under it is
+     * required.
+     *
+     * ⚠️ This is not the same promise as {@see self::testDeclaredKeysAreExpectedAndNeverUnused()},
+     * and the difference came out of the datatable bundle. Its confirmation modals read
+     * `datatable.modal.<action>.<field>` and FALL BACK to a generic text when the key is absent —
+     * the absence is a designed behaviour, not an oversight. Declared as keys, every action type a
+     * project does not customise would be reported missing; not declared at all, every one it does
+     * customise would be reported dead.
+     */
+    public function testDeclaredPrefixesCoverWithoutRequiring(): void
+    {
+        $report = new JsTranslationAudit($this->translator([
+            'fr' => ['datatable.modal.delete.title' => 'Supprimer ?'],
+        ]))->audit(new JsTranslationScan(), ['fr'], [], ['datatable.modal.']);
+
+        self::assertSame([], $report->unused());
+        self::assertSame([], $report->missing());
+        self::assertTrue($report->isClean());
+    }
+
+    public function testAKeyOutsideEveryDeclaredPrefixIsStillUnused(): void
+    {
+        $report = new JsTranslationAudit($this->translator([
+            'fr' => ['datatable.gone' => 'Parti'],
+        ]))->audit(new JsTranslationScan(), ['fr'], [], ['datatable.modal.']);
+
+        self::assertSame(['datatable.gone'], $report->unused());
+    }
+
     public function testDynamicCallsAreCarriedThroughToTheReport(): void
     {
         $scan = new JsTranslationScanner()->scanSource('this.t(labelKey);', 'a.js');
