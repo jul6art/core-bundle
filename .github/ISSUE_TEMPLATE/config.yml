@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/jul6art/core-bundle/security/advisories/new
+    about: A flaw in the encryption service, soft delete failing to hide, injection through a shared repository helper. Reported privately, never as an issue.
+  - name: How to contribute
+    url: https://github.com/jul6art/core-bundle/blob/master/.github/CONTRIBUTING.md
+    about: The quality gate (composer qa), what the CI adds on top of it, and the house rules.
+  - name: Documentation
+    url: https://github.com/jul6art/core-bundle#readme
+    about: Configuration, contracts, and the traps already paid for.
