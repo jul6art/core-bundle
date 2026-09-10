@@ -4,7 +4,7 @@
 
 <p align="center">
     <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
-    <img src="https://img.shields.io/static/v1?label=stable&message=v2&color=orange" alt="Version">
+    <img src="https://img.shields.io/static/v1?label=stable&message=v3&color=orange" alt="Version">
 </p>
 
 jul6art/core-bundle
@@ -38,7 +38,7 @@ feature:
 | `core.email_debug` handler | `composer require symfony/monolog-bundle symfony/mailer` |
 | `Security\Encryptor`, `Doctrine\Type\EncryptedStringType` | `ext-sodium` (bundled with PHP, but a distribution can omit it) |
 | `Command\PurgeCommand` (`core:purge`) | `composer require symfony/console symfony/lock` — and `symfony/expression-language` only if a policy uses a `condition` |
-| `Twig\NumberExtension`, `Twig\PdfAssetExtension` | `composer require twig/twig` (registered only when Twig is present) |
+| `Twig\NumberExtension` | `composer require twig/twig` (registered only when Twig is present) |
 | `Form\Extension\NumberTypeGroupingExtension` | `composer require symfony/form` |
 | `Controller\AbstractController` (et `addFormError()`) | `composer require symfony/framework-bundle symfony/form` |
 | `Controller\BulkActionRunner` | `composer require symfony/security-csrf` (le service n'est enregistré que si le gestionnaire de jetons existe) |
@@ -846,34 +846,25 @@ Nothing to format returns an **empty string**, never a `0` or a dash — so the 
 > The filters are also registered as `fr_number`, `fr_money` and `fr_percent`. Those are
 > historical names kept for existing templates; use the neutral ones in new code.
 
-PDF assets
-----------
-
-`asset()` returns an HTTP URL relative to the current request. dompdf does not fetch remote
-URLs in production and has no base to resolve a schemeless relative one — so the image
-**silently never loads**. These two helpers are the way around it.
-
-```twig
-{# filesystem path, when dompdf may read the directory #}
-<img src="{{ pdf_image_path(organization.logoPath) }}">
-
-{# base64 data: URI, which no chroot or isRemoteEnabled setting can block #}
-<img src="{{ pdf_image_data_uri(organization.logoPath) }}">
-```
-
-```yaml
-core:
-    pdf:
-        public_dir: '%kernel.project_dir%/public'
-```
-
-Prefer the data URI for small images — logos, headers — at the cost of roughly a third more
-HTML weight; prefer the path when a filesystem location is what is wanted. Both return `null`
-on an empty input, so a template keeps its `{% if %}` unchanged.
-
-> ⚠️ `pdf_image_data_uri()` refuses a file under 100 bytes. A truncated upload would otherwise
-> produce a well-formed URI that dompdf renders as a **white square** — worse than no image,
-> because nothing signals the failure.
+> **The PDF helpers have moved.** `Twig\PdfAssetExtension` (`pdf_image_path()` /
+> `pdf_image_data_uri()`) and the `core.pdf.public_dir` option live in
+> **`jul6art/pdf-bundle`** since v3.0.0 of this bundle. Two consumers had it configured and
+> never called it — a real, observed gap — and everything else this bundle now touches PDF
+> rendering only through `NumberFormatter`, which stays here. The replacement is a namespace
+> and a configuration key:
+>
+> ```diff
+> -use Jul6Art\CoreBundle\Twig\PdfAssetExtension;
+> +use Jul6Art\PdfBundle\Asset\PdfAssetExtension;
+> ```
+>
+> ```diff
+> -core:
+> -    pdf:
+> -        public_dir: '%kernel.project_dir%/public'
+> +pdf:
+> +    public_dir: '%kernel.project_dir%/public'
+> ```
 
 Form bricks
 -----------

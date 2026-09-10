@@ -29,7 +29,6 @@ use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
-use Jul6Art\CoreBundle\Twig\PdfAssetExtension;
 use Jul6Art\CoreBundle\Twig\PerformanceExtension;
 use Monolog\Formatter\HtmlFormatter;
 use Symfony\Bundle\FrameworkBundle\DataCollector\AbstractDataCollector;
@@ -260,12 +259,6 @@ class CoreExtension extends Extension implements PrependExtensionInterface
 
             $container->register(NumberExtension::class, NumberExtension::class)
                 ->setArguments([new Reference(NumberFormatter::class)])
-                ->addTag('twig.extension');
-
-            $pdf = \is_array($config['pdf'] ?? null) ? $config['pdf'] : [];
-
-            $container->register(PdfAssetExtension::class, PdfAssetExtension::class)
-                ->setArguments([self::asStringOr($pdf['public_dir'] ?? null, '%kernel.project_dir%/public')])
                 ->addTag('twig.extension');
         }
 

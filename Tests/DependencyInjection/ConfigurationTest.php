@@ -45,7 +45,6 @@ final class ConfigurationTest extends TestCase
                 'decimals' => 2,
             ],
             'form' => ['number_grouping' => false],
-            'pdf' => ['public_dir' => '%kernel.project_dir%/public'],
             'security_headers' => [
                 'enabled' => false,
                 'csp_enforce' => false,

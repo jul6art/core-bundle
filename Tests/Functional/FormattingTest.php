@@ -31,11 +31,6 @@ final class FormattingTest extends AbstractFunctionalTestCase
         self::assertSame('20'.self::NBSP.'%', $this->render('{{ 20|fr_percent }}'));
     }
 
-    public function testThePdfHelpersAreUsableFromATemplate(): void
-    {
-        self::assertStringEndsWith('/public/img/logo.png', $this->render("{{ pdf_image_path('img/logo.png') }}"));
-    }
-
     public function testTheSeparatorsFollowTheConfiguration(): void
     {
         $rendered = $this->render(
@@ -44,13 +39,6 @@ final class FormattingTest extends AbstractFunctionalTestCase
         );
 
         self::assertSame('1,234.56', $rendered);
-    }
-
-    public function testThePublicDirectoryFollowsTheConfiguration(): void
-    {
-        $rendered = $this->render("{{ pdf_image_path('logo.png') }}", ['pdf' => ['public_dir' => '/srv/assets']]);
-
-        self::assertSame('/srv/assets/logo.png', $rendered);
     }
 
     /** The formatter is available as a service too, for anything outside a template. */

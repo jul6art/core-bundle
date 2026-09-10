@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Tests\Functional;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Event\PostFlushEventArgs;
+use Doctrine\ORM\Events;
 use Doctrine\ORM\Tools\SchemaTool;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Event\EntityPurgedEvent;
@@ -92,12 +94,12 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
             /** @var list<int> */
             public array $sizes = [];
 
-            public function postFlush(\Doctrine\ORM\Event\PostFlushEventArgs $args): void
+            public function postFlush(PostFlushEventArgs $args): void
             {
                 $this->sizes[] = $args->getObjectManager()->getUnitOfWork()->size();
             }
         };
-        $this->entityManager->getEventManager()->addEventListener([\Doctrine\ORM\Events::postFlush], $probe);
+        $this->entityManager->getEventManager()->addEventListener([Events::postFlush], $probe);
 
         $tester = $this->runPurge([]);
 
