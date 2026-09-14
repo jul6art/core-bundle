@@ -21,7 +21,7 @@ final class JsTranslationAuditCommandTest extends AbstractFunctionalTestCase
 {
     public function testACleanProjectSucceeds(): void
     {
-        $tester = $this->audit([\dirname(__DIR__).'/Fixtures/assets']);
+        $tester = $this->audit([__DIR__.'/../Fixtures/assets']);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         self::assertStringContainsString('javascript', $tester->getDisplay());
