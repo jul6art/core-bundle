@@ -248,7 +248,7 @@ final class PurgeCommand extends Command
             ->from($className, 'e')
             ->where(\sprintf('e.%s < :threshold', $field))
             ->setParameter('threshold', $threshold)
-            ->orderBy('e.id', 'ASC')
+            ->orderBy('e.id', \SortDirection::Ascending)
             ->setMaxResults($this->batchSize);
 
         if (null !== $lastId) {
