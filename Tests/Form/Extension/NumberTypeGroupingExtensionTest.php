@@ -37,6 +37,19 @@ final class NumberTypeGroupingExtensionTest extends TestCase
         self::assertFalse($form->getConfig()->getOption('grouping'));
     }
 
+    /**
+     * ⚠️ An `html5` field renders `<input type="number">`, which cannot carry a grouped value — and
+     * Symfony refuses the combination outright: "Cannot use the grouping option when the html5
+     * option is enabled", a 500 on the page that builds the form. The extension leaves such a field
+     * ungrouped instead of breaking it.
+     */
+    public function testAnHtml5FieldIsLeftUngrouped(): void
+    {
+        $form = $this->factory()->create(NumberType::class, null, ['html5' => true]);
+
+        self::assertFalse($form->getConfig()->getOption('grouping'));
+    }
+
     public function testItAppliesToNumberTypeOnly(): void
     {
         self::assertSame([NumberType::class], [...NumberTypeGroupingExtension::getExtendedTypes()]);

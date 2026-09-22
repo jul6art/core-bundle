@@ -6,6 +6,7 @@ namespace Jul6Art\CoreBundle\Form\Extension;
 
 use Symfony\Component\Form\AbstractTypeExtension;
 use Symfony\Component\Form\Extension\Core\Type\NumberType;
+use Symfony\Component\OptionsResolver\Options;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
@@ -20,7 +21,8 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  * **Opt-in** (`core.form.number_grouping: true`), because it changes how every numeric field
  * of an application looks — not something a bundle should decide on installation. A single
  * field can still opt out with `'grouping' => false`, for a numeric identifier that must not
- * be grouped.
+ * be grouped — and an `html5` field is left ungrouped, since a native number input cannot hold
+ * "1 234".
  */
 final class NumberTypeGroupingExtension extends AbstractTypeExtension
 {
@@ -35,6 +37,8 @@ final class NumberTypeGroupingExtension extends AbstractTypeExtension
     #[\Override]
     public function configureOptions(OptionsResolver $resolver): void
     {
-        $resolver->setDefault('grouping', true);
+        // ⚠️ Never on an `html5` field: `<input type="number">` cannot carry a grouped value, and
+        // Symfony rejects the pair with a LogicException — a 500 on the page building the form.
+        $resolver->setDefault('grouping', static fn (Options $options): bool => true !== $options['html5']);
     }
 }
