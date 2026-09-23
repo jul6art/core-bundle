@@ -109,7 +109,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
 
         $container->register(QueryStringRedactingProcessor::class, QueryStringRedactingProcessor::class)
             ->setArguments([\is_array($parameters) ? array_values(array_filter($parameters, \is_string(...))) : QueryStringRedactingProcessor::DEFAULT_PARAMETERS])
-            ->addTag('monolog.processor');
+            ->addTag('monolog.processor', ['priority' => QueryStringRedactingProcessor::PRIORITY]);
     }
 
     /**

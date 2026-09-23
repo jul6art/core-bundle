@@ -41,7 +41,11 @@ final class CoreExtensionTest extends TestCase
 
         self::assertTrue($container->hasDefinition(QueryStringRedactingProcessor::class));
         $definition = $container->getDefinition(QueryStringRedactingProcessor::class);
-        self::assertTrue($definition->hasTag('monolog.processor'), 'Sans le tag, Monolog ne l\'appelle jamais.');
+        self::assertSame(
+            [['priority' => QueryStringRedactingProcessor::PRIORITY]],
+            $definition->getTag('monolog.processor'),
+            'Without the tag Monolog never calls it; without a LOW priority, a processor that copies the URI into the record (WebProcessor) could run after it.',
+        );
         self::assertSame([QueryStringRedactingProcessor::DEFAULT_PARAMETERS], $definition->getArguments());
     }
 

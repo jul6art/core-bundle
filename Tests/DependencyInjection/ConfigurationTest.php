@@ -125,6 +125,16 @@ final class ConfigurationTest extends TestCase
      * `csp_enforce` is a scalar node so a deployment can drive it from the environment; the
      * placeholder has to survive processing untouched to be resolved at runtime.
      */
+    /**
+     * An empty name would compile to `(?:)=` and redact every `?=` and `&=`: refused at compile time.
+     */
+    public function testAnEmptyRedactedParameterNameIsRefused(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        new Processor()->processConfiguration(new Configuration(), [['log_redaction' => ['parameters' => ['q', '']]]]);
+    }
+
     public function testTheCspEnforceFlagAcceptsAnEnvPlaceholder(): void
     {
         $headers = $this->process([['security_headers' => ['csp_enforce' => '%env(bool:CSP_ENFORCE)%']]])['security_headers'];

@@ -13,8 +13,8 @@ use Monolog\Processor\ProcessorInterface;
  * ## The leak this closes
  *
  * ⚠️ **The URI of a request is written to the log by the framework itself**: the `RouterListener`
- * message and its `request_uri` context, the `url` and `referrer` `WebProcessor` adds to every record,
- * the message of a `NotFoundHttpException`. In production the `fingers_crossed` handler buffers every
+ * message and its `request_uri` context, the message of a `NotFoundHttpException` — and, if the
+ * project registers `WebProcessor`, the `url` and `referrer` it adds to every record. In production the `fingers_crossed` handler buffers every
  * record of a request and flushes the whole buffer when ONE error occurs — so one unrelated 500 writes
  * the full query string of that request, and it lives as long as the log does.
  *
@@ -28,9 +28,10 @@ use Monolog\Processor\ProcessorInterface;
  * ⚠️ **The value only, never the parameter name.** A reader must still see THAT a link was signed or
  * a search was made, otherwise the log stops explaining what happened.
  *
- * ⚠️ **A `Throwable` is REPLACED** by its class and redacted message when its message carries such a
- * value: an exception's message cannot be rewritten, and handing the formatter something else is the
- * only way to keep the value away from it. Its stack trace is lost for that one record — the price.
+ * ⚠️ **A `Throwable` is REPLACED** by its class and redacted message — and those of its `previous`
+ * chain — when any of them carries such a value: an exception's message cannot be rewritten, and
+ * handing the formatter something else is the only way to keep the value away from it. Its stack
+ * trace is lost for that one record — the price.
  *
  * Moved here from cegeta (`CredentialRedactingProcessor`, ADR-0037), where it was the only one of
  * three products to do it.
@@ -39,6 +40,13 @@ final readonly class QueryStringRedactingProcessor implements ProcessorInterface
 {
     /** @var list<string> */
     public const array DEFAULT_PARAMETERS = ['_hash', 'token', '_token', 'q', 'search'];
+
+    /**
+     * ⚠️ **Low, so it runs LAST among the logger's processors**: one that copies the URI into the
+     * record (`WebProcessor`'s `url` and `referrer`) must run before it, or the copy stays in clear.
+     * Handler-level processors still run after it — they are for the project to order.
+     */
+    public const int PRIORITY = -1024;
 
     private string $pattern;
 
@@ -80,15 +88,42 @@ final readonly class QueryStringRedactingProcessor implements ProcessorInterface
             } elseif (\is_array($value)) {
                 $values[$key] = $this->redactAll($value);
             } elseif ($value instanceof \Throwable) {
-                $redacted = $this->redact($value->getMessage());
-
-                if ($redacted !== $value->getMessage()) {
-                    $values[$key] = ['class' => $value::class, 'message' => $redacted];
+                if ($this->carriesAValue($value)) {
+                    $values[$key] = $this->describe($value);
                 }
             }
         }
 
         return $values;
+    }
+
+    /**
+     * Whether the throwable or any exception it wraps carries a redacted value — the formatter
+     * serialises the whole `previous` chain, so a neutral outer message is not enough.
+     */
+    private function carriesAValue(\Throwable $throwable): bool
+    {
+        for ($current = $throwable; null !== $current; $current = $current->getPrevious()) {
+            if ($this->redact($current->getMessage()) !== $current->getMessage()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<string, mixed> the class and redacted message, and the same for `previous`
+     */
+    private function describe(\Throwable $throwable): array
+    {
+        $description = ['class' => $throwable::class, 'message' => $this->redact($throwable->getMessage())];
+
+        if (null !== $throwable->getPrevious()) {
+            $description['previous'] = $this->describe($throwable->getPrevious());
+        }
+
+        return $description;
     }
 
     private function redact(string $subject): string

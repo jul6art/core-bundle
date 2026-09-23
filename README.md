@@ -114,8 +114,8 @@ GET /app/search?q=[redacted]            GET /verify-email?id=4&_hash=[redacted]
 ```
 
 In production the `fingers_crossed` handler flushes the whole buffer of a request on its first error,
-and the framework logs the full URI in several places (`RouterListener`, `WebProcessor`'s `url` and
-`referrer`, a `NotFoundHttpException`). Without this, one unrelated 500 writes a working signed link,
+and the framework logs the full URI in several places (`RouterListener`, a `NotFoundHttpException`,
+and `WebProcessor`'s `url` and `referrer` if the project registers it). Without this, one unrelated 500 writes a working signed link,
 or what someone searched for, to the log.
 
 On by default, for every Monolog channel (it can only hide a value, never break a response). The
@@ -129,7 +129,9 @@ core:
         # enabled: false
 ```
 
-Requires Monolog; without it nothing is registered.
+Requires Monolog; without it nothing is registered. It runs at priority `-1024`, after the logger's
+other processors, so one that copies the URI into the record is redacted too — a processor attached to
+a HANDLER runs later still, and is the project's to order.
 
 HTTP security headers
 ---------------------

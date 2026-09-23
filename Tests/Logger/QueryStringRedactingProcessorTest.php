@@ -34,7 +34,7 @@ final class QueryStringRedactingProcessorTest extends TestCase
         ));
 
         self::assertSame('http://localhost/app/search?q=[redacted]', $record->context['request_uri']);
-        self::assertSame('/api/items?page=1&search=[redacted]&itemsPerPage=25', $record->extra['url'], 'Les autres paramètres restent lisibles.');
+        self::assertSame('/api/items?page=1&search=[redacted]&itemsPerPage=25', $record->extra['url'], 'The other parameters stay readable.');
         self::assertSame('https://x.test/verify-email?id=4&_hash=[redacted]', $record->extra['referrer']);
     }
 
@@ -72,18 +72,38 @@ final class QueryStringRedactingProcessorTest extends TestCase
         );
     }
 
+    /**
+     * The formatter serialises the whole `previous` chain: a neutral outer exception wrapping one
+     * that carries the URI would write the value anyway.
+     */
+    public function testThePreviousExceptionsAreRedactedToo(): void
+    {
+        $record = $this->process(new LogRecord(
+            new \DateTimeImmutable(),
+            'request',
+            Level::Error,
+            'Uncaught PHP Exception',
+            ['exception' => new \RuntimeException('Rendering failed', 0, new \RuntimeException('No route found for "GET /reset?token=abc123"'))],
+        ));
+
+        self::assertSame(
+            ['class' => \RuntimeException::class, 'message' => 'Rendering failed', 'previous' => ['class' => \RuntimeException::class, 'message' => 'No route found for "GET /reset?token=[redacted]"']],
+            $record->context['exception'],
+        );
+    }
+
     public function testAnInnocentRecordIsReturnedUntouched(): void
     {
-        $record = new LogRecord(new \DateTimeImmutable(), 'app', Level::Info, 'GET /faq?page=2&quality=high', ['e' => new \RuntimeException('plain')], ['url' => '/faq?page=2']);
+        $record = new LogRecord(new \DateTimeImmutable(), 'app', Level::Info, 'GET /help?faq=1&page=2&quality=high', ['e' => new \RuntimeException('plain')], ['url' => '/faq?page=2']);
 
-        self::assertSame($record, $this->process($record), '`faq=`, `quality=` ne sont pas `q=` : le nom doit être entier.');
+        self::assertSame($record, $this->process($record), '`faq=` and `quality=` are not `q=`: the whole name must match.');
     }
 
     public function testTheListIsTheOneConfigured(): void
     {
         $record = new QueryStringRedactingProcessor(['iban'])(new LogRecord(new \DateTimeImmutable(), 'app', Level::Info, '/pay?IBAN=LU28&q=kept'));
 
-        self::assertSame('/pay?IBAN=[redacted]&q=kept', $record->message, 'Insensible à la casse, et seulement les noms listés.');
+        self::assertSame('/pay?IBAN=[redacted]&q=kept', $record->message, 'Case-insensitive, and only the listed names.');
     }
 
     private function process(LogRecord $record): LogRecord
