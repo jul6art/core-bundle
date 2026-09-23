@@ -103,6 +103,34 @@ the same plaintext never produces the same ciphertext twice, and decryption
 authenticates the payload. Pass the key as an env var: it is read at runtime, not baked
 into the container.
 
+Log redaction
+-------------
+
+The **value** of sensitive query parameters is redacted from every log record — message, context,
+`extra`, and the message of a logged exception:
+
+```
+GET /app/search?q=[redacted]            GET /verify-email?id=4&_hash=[redacted]
+```
+
+In production the `fingers_crossed` handler flushes the whole buffer of a request on its first error,
+and the framework logs the full URI in several places (`RouterListener`, `WebProcessor`'s `url` and
+`referrer`, a `NotFoundHttpException`). Without this, one unrelated 500 writes a working signed link,
+or what someone searched for, to the log.
+
+On by default, for every Monolog channel (it can only hide a value, never break a response). The
+defaults are `_hash`, `token`, `_token` (signed links) and `q`, `search` (search terms); the name
+stays, only the value goes. The list replaces the default one — repeat the defaults to extend it:
+
+```yaml
+core:
+    log_redaction:
+        parameters: ['_hash', 'token', '_token', 'q', 'search', 'iban']
+        # enabled: false
+```
+
+Requires Monolog; without it nothing is registered.
+
 HTTP security headers
 ---------------------
 

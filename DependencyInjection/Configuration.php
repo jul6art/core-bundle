@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
+use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
@@ -94,6 +95,18 @@ class Configuration implements ConfigurationInterface
                         ->booleanNode('number_grouping')
                             ->info('Turns on thousands grouping for every NumberType. Off by default: it changes how every numeric field of the application looks.')
                             ->defaultFalse()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('log_redaction')
+                    ->info('Redacts the VALUE of sensitive query parameters (signed-link secrets, search terms) from every log record. On by default: it can only hide a value, never break a response.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')->defaultTrue()->end()
+                        ->arrayNode('parameters')
+                            ->info('Query parameter names whose value is redacted, case-insensitively. Replaces the default list: repeat the defaults to extend it.')
+                            ->scalarPrototype()->end()
+                            ->defaultValue(QueryStringRedactingProcessor::DEFAULT_PARAMETERS)
                         ->end()
                     ->end()
                 ->end()

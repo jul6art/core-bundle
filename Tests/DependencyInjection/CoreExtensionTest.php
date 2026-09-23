@@ -7,6 +7,7 @@ namespace Jul6Art\CoreBundle\Tests\DependencyInjection;
 use Jul6Art\CoreBundle\DependencyInjection\CoreExtension;
 use Jul6Art\CoreBundle\EntityListener\AbstractEntityListener;
 use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
+use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
 use Monolog\Formatter\HtmlFormatter;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -31,6 +32,28 @@ final class CoreExtensionTest extends TestCase
 
         $calls = array_column($definition->getMethodCalls(), 0);
         self::assertSame(['setRequestStack', 'setTokenStorage', 'setTranslator'], $calls);
+    }
+
+    public function testTheLogRedactionIsOnByDefaultWithItsDefaultParameters(): void
+    {
+        $container = $this->containerBuilder();
+        new CoreExtension()->load([], $container);
+
+        self::assertTrue($container->hasDefinition(QueryStringRedactingProcessor::class));
+        $definition = $container->getDefinition(QueryStringRedactingProcessor::class);
+        self::assertTrue($definition->hasTag('monolog.processor'), 'Sans le tag, Monolog ne l\'appelle jamais.');
+        self::assertSame([QueryStringRedactingProcessor::DEFAULT_PARAMETERS], $definition->getArguments());
+    }
+
+    public function testTheLogRedactionCanBeWidenedOrTurnedOff(): void
+    {
+        $container = $this->containerBuilder();
+        new CoreExtension()->load([['log_redaction' => ['parameters' => ['iban']]]], $container);
+        self::assertSame([['iban']], $container->getDefinition(QueryStringRedactingProcessor::class)->getArguments());
+
+        $container = $this->containerBuilder();
+        new CoreExtension()->load([['log_redaction' => ['enabled' => false]]], $container);
+        self::assertFalse($container->hasDefinition(QueryStringRedactingProcessor::class));
     }
 
     public function testLoadRegistersTheAbstractEventListener(): void

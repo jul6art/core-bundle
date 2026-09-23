@@ -10,6 +10,7 @@ use Jul6Art\CoreBundle\Controller\BulkActionRunner;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
+use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
 use Jul6Art\CoreBundle\Performance\CacheClearer\PerformanceStoreClearer;
 use Jul6Art\CoreBundle\Performance\CacheWarmer\PerformanceStoreWarmer;
 use Jul6Art\CoreBundle\Performance\Command\ClearCommand;
@@ -31,6 +32,7 @@ use Jul6Art\CoreBundle\Service\NumberFormatter;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
 use Jul6Art\CoreBundle\Twig\PerformanceExtension;
 use Monolog\Formatter\HtmlFormatter;
+use Monolog\LogRecord;
 use Symfony\Bundle\FrameworkBundle\DataCollector\AbstractDataCollector;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Console\Command\Command;
@@ -84,6 +86,30 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerDoctrineServices($container, self::purgeBatchSize($config), self::purgeAliases($config));
         $this->registerPerformance($container, \is_array($config['performance'] ?? null) ? $config['performance'] : []);
         $this->registerJsTranslationAudit($container);
+        $this->registerLogRedaction($container, \is_array($config['log_redaction'] ?? null) ? $config['log_redaction'] : []);
+    }
+
+    /**
+     * The query-string redactor, for every Monolog channel. Needs Monolog, which this bundle only
+     * suggests: without it there is no log to protect.
+     *
+     * ⚠️ Tagged `monolog.processor` with no channel and no handler, so it runs on EVERY record: the
+     * same URI is logged by the router, the kernel and the error handler, on three channels, and a
+     * redactor covering only the door it was written for is the shape of leak that comes back.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerLogRedaction(ContainerBuilder $container, array $config): void
+    {
+        if (false === ($config['enabled'] ?? true) || !class_exists(LogRecord::class)) {
+            return;
+        }
+
+        $parameters = $config['parameters'] ?? QueryStringRedactingProcessor::DEFAULT_PARAMETERS;
+
+        $container->register(QueryStringRedactingProcessor::class, QueryStringRedactingProcessor::class)
+            ->setArguments([\is_array($parameters) ? array_values(array_filter($parameters, \is_string(...))) : QueryStringRedactingProcessor::DEFAULT_PARAMETERS])
+            ->addTag('monolog.processor');
     }
 
     /**

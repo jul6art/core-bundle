@@ -45,6 +45,7 @@ final class ConfigurationTest extends TestCase
                 'decimals' => 2,
             ],
             'form' => ['number_grouping' => false],
+            'log_redaction' => ['enabled' => true, 'parameters' => ['_hash', 'token', '_token', 'q', 'search']],
             'security_headers' => [
                 'enabled' => false,
                 'csp_enforce' => false,
