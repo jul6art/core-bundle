@@ -13,6 +13,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\DependencyInjection\ParameterBag\ContainerBagInterface;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -45,6 +46,9 @@ final class PurgeCommand extends Command
         private readonly LockFactory $lockFactory,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly int $batchSize = 100,
+        // Resolves an interval that names a parameter (`%app.retention%`). Optional so the
+        // command still builds by hand; without it such an interval fails loudly below.
+        private readonly ?ContainerBagInterface $parameters = null,
     ) {
         parent::__construct();
     }
@@ -156,7 +160,7 @@ final class PurgeCommand extends Command
         ?ExpressionLanguage $expressionLanguage,
         bool $dryRun,
     ): int {
-        $threshold = new \DateTimeImmutable($purgeable->interval);
+        $threshold = new \DateTimeImmutable($this->interval($purgeable));
         $count = 0;
         $lastId = null;
 
@@ -211,7 +215,7 @@ final class PurgeCommand extends Command
                         entityShortName: $shortName,
                         entityId: $row['id'],
                         organizationId: $row['organizationId'],
-                        interval: $purgeable->interval,
+                        interval: $this->interval($purgeable),
                         condition: $purgeable->condition,
                     ),
                     EntityPurgedEvent::NAME,
@@ -226,7 +230,7 @@ final class PurgeCommand extends Command
                 $count,
                 $dryRun ? 'to purge' : 'purged',
                 $purgeable->field,
-                $purgeable->interval,
+                $this->interval($purgeable),
                 '' !== $purgeable->condition ? ', condition: '.$purgeable->condition : '',
             ));
         }
@@ -237,10 +241,30 @@ final class PurgeCommand extends Command
     /**
      * One window of expired rows, ordered by identifier and starting after the last one seen.
      *
-     * @param class-string $className
-     *
      * @return list<object>
      */
+    /**
+     * The interval as the purge applies it. An attribute argument must be a constant, so a
+     * retention an operator changes (an audit trail kept 18 months, then 12) is written as a
+     * parameter — `#[Purgeable(field: 'createdAt', interval: '%app.retention%')]` — and resolved
+     * here, at run time: a parameter fed by `%env(...)%` then changes the purge with no rebuild
+     * and no migration.
+     */
+    private function interval(Purgeable $purgeable): string
+    {
+        if (null === $this->parameters || !str_contains($purgeable->interval, '%')) {
+            return $purgeable->interval;
+        }
+
+        $resolved = $this->parameters->resolveValue($purgeable->interval);
+
+        if (!\is_string($resolved) || '' === trim($resolved)) {
+            throw new \LogicException(\sprintf('The purge interval "%s" does not resolve to a non-empty string.', $purgeable->interval));
+        }
+
+        return $resolved;
+    }
+
     private function batch(string $className, string $field, \DateTimeImmutable $threshold, int|string|null $lastId): array
     {
         $builder = $this->entityManager->createQueryBuilder()

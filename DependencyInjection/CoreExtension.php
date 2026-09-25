@@ -449,6 +449,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
                 new Reference('lock.factory'),
                 new Reference('event_dispatcher'),
                 $batchSize,
+                new Reference('parameter_bag'),
             ])
             ->addTag('console.command', ['command' => implode('|', ['core:purge', ...$aliases])]);
     }

@@ -230,6 +230,23 @@ bin/console core:purge --entity=AuditLog  # one entity only
 bin/console core:purge
 ```
 
+**An interval may name a parameter** (since 3.2). An attribute argument must be a constant, so a
+retention an operator is meant to change is written as a parameter and resolved when the command
+runs — fed by an environment variable, it changes the purge with no rebuild and no migration:
+
+```php
+#[Purgeable(field: 'createdAt', interval: '%app.audit_retention%')]
+```
+
+```yaml
+# config/services.yaml
+parameters:
+    env(AUDIT_RETENTION): '-18 months'
+    app.audit_retention: '%env(AUDIT_RETENTION)%'
+```
+
+An interval that does not resolve to a non-empty string fails the purge rather than guessing.
+
 **Measure before you commit to an interval.** `--dry-run` reports the row count, and a
 policy that looks reasonable can turn out to delete most of a table on its first run.
 

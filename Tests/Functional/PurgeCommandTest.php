@@ -11,6 +11,7 @@ use Doctrine\ORM\Tools\SchemaTool;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Event\EntityPurgedEvent;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\ConditionalPurgeableLog;
+use Jul6Art\CoreBundle\Tests\Fixtures\Entity\ParametrisedPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\PurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\RepeatablePurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\Widget;
@@ -50,6 +51,7 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
             $this->entityManager->getClassMetadata(PurgeableLog::class),
             $this->entityManager->getClassMetadata(ConditionalPurgeableLog::class),
             $this->entityManager->getClassMetadata(RepeatablePurgeableLog::class),
+            $this->entityManager->getClassMetadata(ParametrisedPurgeableLog::class),
         ]);
 
         $dispatcher = $this->container->get('event_dispatcher');
@@ -298,6 +300,54 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
     public function testTheCommandIsNotRegisteredWithoutTheOrm(): void
     {
         self::assertFalse($this->boot()->has(PurgeCommand::class));
+    }
+
+    /**
+     * ⚠️ An interval may name a container parameter (`%app.retention%`): a retention is an
+     * operational setting, and an attribute argument can only be a constant. Before 3.2 the
+     * string reached `new \DateTimeImmutable()` as is, and the purge died on it.
+     */
+    public function testAnIntervalNamingAParameterIsResolved(): void
+    {
+        $this->parametrisedLog('-2 months');
+        $this->parametrisedLog('-2 weeks');
+
+        $tester = $this->runPurge(['--entity' => 'ParametrisedPurgeableLog']);
+
+        self::assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        self::assertSame(1, $this->countRows('parametrised_purgeable_log'));
+        // The console wraps its lines: compare on collapsed whitespace.
+        self::assertStringContainsString('interval: -1 month', (string) preg_replace('/\s+/', ' ', $tester->getDisplay()));
+    }
+
+    /**
+     * ⚠️ Changing the value changes the purge, with no rebuild and no migration: the parameter
+     * is fed by an environment variable, read when the command runs.
+     */
+    public function testChangingTheParameterChangesThePurgeWithoutARebuild(): void
+    {
+        $this->parametrisedLog('-2 months');
+        $this->parametrisedLog('-2 weeks');
+
+        $previous = getenv('CORE_TEST_RETENTION');
+        putenv('CORE_TEST_RETENTION=-1 week');
+        $_ENV['CORE_TEST_RETENTION'] = $_SERVER['CORE_TEST_RETENTION'] = '-1 week';
+
+        try {
+            $tester = $this->runPurge(['--entity' => 'ParametrisedPurgeableLog']);
+        } finally {
+            false === $previous ? putenv('CORE_TEST_RETENTION') : putenv('CORE_TEST_RETENTION='.$previous);
+            unset($_ENV['CORE_TEST_RETENTION'], $_SERVER['CORE_TEST_RETENTION']);
+        }
+
+        self::assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        self::assertSame(0, $this->countRows('parametrised_purgeable_log'), 'A week of retention keeps neither row.');
+    }
+
+    private function parametrisedLog(string $age): void
+    {
+        $this->entityManager->persist(new ParametrisedPurgeableLog(new \DateTimeImmutable($age)));
+        $this->entityManager->flush();
     }
 
     /** @param array<string, mixed> $input */

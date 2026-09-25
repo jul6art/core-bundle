@@ -208,6 +208,11 @@ final class TestKernel extends Kernel
 
     private function configure(ContainerBuilder $container): void
     {
+        // Read by `ParametrisedPurgeableLog`: the purge must resolve it, at RUNTIME (the env
+        // variable is read when the command runs, not when the container is compiled).
+        $container->setParameter('env(CORE_TEST_RETENTION)', '-1 month');
+        $container->setParameter('core_test.retention', '%env(CORE_TEST_RETENTION)%');
+
         $container->loadFromExtension('framework', [
             'secret' => 'core-bundle-tests',
             'http_method_override' => false,
