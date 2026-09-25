@@ -102,6 +102,46 @@ final class NumberFormatterTest extends TestCase
         self::assertSame('', new NumberFormatter()->formatPercent(null));
     }
 
+    // ── quantités ─────────────────────────────────────────────────────────
+
+    /**
+     * A quantity shows its decimals only when it has some: a `decimal(_, 2)` column hands back
+     * "2.00" for two pieces, and "2,00 pièces" reads as a price, not a count.
+     *
+     * @return iterable<string, array{int|float|string, string}>
+     */
+    public static function quantityProvider(): iterable
+    {
+        yield 'a whole decimal string loses its zeros' => ['2.00', '2'];
+        yield 'one significant decimal is kept' => ['2.50', '2,5'];
+        yield 'two significant decimals are kept' => ['0.75', '0,75'];
+        yield 'thousands keep their separator' => ['1234.50', '1'.self::NBSP.'234,5'];
+        yield 'an integer stays an integer' => [12, '12'];
+        yield 'zero is zero' => ['0.00', '0'];
+        yield 'a negative level keeps its sign' => ['-1.50', '-1,5'];
+        yield 'rounding happens before trimming' => [1.996, '2'];
+        yield 'a zero inside the integer part survives' => ['10.00', '10'];
+    }
+
+    #[DataProvider('quantityProvider')]
+    public function testAQuantityShowsOnlyTheDecimalsItHas(int|float|string $value, string $expected): void
+    {
+        self::assertSame($expected, new NumberFormatter()->formatQuantity($value));
+    }
+
+    #[DataProvider('emptyProvider')]
+    public function testAQuantityOfNothingIsNothing(int|float|string|null $value): void
+    {
+        self::assertSame('', new NumberFormatter()->formatQuantity($value));
+    }
+
+    /** The configured separator applies to quantities too — trimming must not assume a comma. */
+    public function testAQuantityFollowsTheConfiguredSeparator(): void
+    {
+        self::assertSame('2.5', new NumberFormatter(decimalSeparator: '.', thousandsSeparator: ',')->formatQuantity('2.50'));
+        self::assertSame('2', new NumberFormatter(decimalSeparator: '.', thousandsSeparator: ',')->formatQuantity('2.00'));
+    }
+
     // ── séparateurs configurables ─────────────────────────────────────────
 
     /** The defaults follow the French convention; another locale reconfigures them. */

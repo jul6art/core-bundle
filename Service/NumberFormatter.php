@@ -50,6 +50,29 @@ final readonly class NumberFormatter
     }
 
     /**
+     * A quantity — a stock level, a threshold, a line quantity — shows only the decimals it has:
+     * `2.00` reads `2`, `2.50` reads `2,5`, `0.75` reads `0,75`.
+     *
+     * A `decimal(_, 2)` column hands back "2.00" for two pieces, and `format()` would print
+     * "2,00" — the shape of a price, on something that is counted. Rounding to the configured
+     * decimals happens FIRST, then the trailing zeros go: trimming before rounding would turn
+     * 1.996 into "1,996".
+     */
+    public function formatQuantity(int|float|string|null $value): string
+    {
+        $formatted = $this->format($value);
+
+        if ('' === $formatted || '' === $this->decimalSeparator || !str_contains($formatted, $this->decimalSeparator)) {
+            return $formatted;
+        }
+
+        [$integer, $fraction] = explode($this->decimalSeparator, $formatted, 2);
+        $fraction = rtrim($fraction, '0');
+
+        return '' === $fraction ? $integer : $integer.$this->decimalSeparator.$fraction;
+    }
+
+    /**
      * The most frequent pairing: an amount and its currency.
      */
     public function formatMoney(int|float|string|null $value, string $currency, ?int $decimals = null): string

@@ -17,6 +17,7 @@ use Twig\TwigFilter;
  * {{ invoice.total|format_number(0) }}     {# 1 235 #}
  * {{ invoice.total|format_money('EUR') }}  {# 1 234,56 EUR #}
  * {{ line.vatRate|format_percent }}        {# 20 % #}
+ * {{ level.quantity|format_quantity }}     {# 2 — or 2,5 — never 2,00 #}
  * ```
  *
  * Each filter is registered twice: under a neutral name — what a new project should use — and
@@ -39,6 +40,7 @@ final class NumberExtension extends AbstractExtension
             new TwigFilter('format_number', $this->number(...)),
             new TwigFilter('format_money', $this->money(...)),
             new TwigFilter('format_percent', $this->percent(...)),
+            new TwigFilter('format_quantity', $this->quantity(...)),
             // Historical names, same behaviour.
             new TwigFilter('fr_number', $this->number(...)),
             new TwigFilter('fr_money', $this->money(...)),
@@ -54,6 +56,11 @@ final class NumberExtension extends AbstractExtension
     public function money(int|float|string|null $value, string $currency, ?int $decimals = null): string
     {
         return $this->formatter->formatMoney($value, $currency, $decimals);
+    }
+
+    public function quantity(int|float|string|null $value): string
+    {
+        return $this->formatter->formatQuantity($value);
     }
 
     public function percent(int|float|string|null $value, int $decimals = 0): string

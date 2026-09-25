@@ -865,6 +865,7 @@ each template choosing its own `number_format()` arguments.
 {{ invoice.total|format_number(0) }}     {# 1 235 #}
 {{ invoice.total|format_money('EUR') }}  {# 1 234,56 EUR #}
 {{ line.vatRate|format_percent }}        {# 20 % #}
+{{ level.quantity|format_quantity }}     {# 2 — 2,5 — 0,75, never 2,00 #}
 ```
 
 ```php
@@ -884,6 +885,10 @@ core:
 The defaults follow the French / Luxembourg convention. The thousands separator is a
 **non-breaking space** on purpose: a regular one lets a PDF renderer wrap a number across two
 lines. The percent sign is glued the same way.
+
+`format_quantity` is for what is **counted** — stock levels, thresholds, line quantities. It rounds
+to the configured decimals, then drops the trailing zeros: a `decimal(_, 2)` column hands back
+`2.00` for two pieces, and `2,00` reads as a price.
 
 Nothing to format returns an **empty string**, never a `0` or a dash — so the template decides:
 `{{ value|format_number ?: '—' }}`.

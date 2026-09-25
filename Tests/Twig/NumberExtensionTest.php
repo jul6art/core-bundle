@@ -60,6 +60,12 @@ final class NumberExtensionTest extends TestCase
         );
     }
 
+    public function testTheQuantityFilterDropsTheDecimalsAWholeNumberDoesNotHave(): void
+    {
+        self::assertSame('2', $this->render('{{ v|format_quantity }}', ['v' => '2.00']));
+        self::assertSame('2,5', $this->render('{{ v|format_quantity }}', ['v' => '2.50']));
+    }
+
     public function testAnEmptyValueRendersAsNothingSoTheTemplateCanFallBack(): void
     {
         self::assertSame('—', $this->render('{{ v|fr_number ?: "—" }}', ['v' => null]));
