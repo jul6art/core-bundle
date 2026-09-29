@@ -247,6 +247,20 @@ parameters:
 
 An interval that does not resolve to a non-empty string fails the purge rather than guessing.
 
+**Bulk, for high-volume tables** (since 3.4). By default every expired row is hydrated and removed through the
+unit of work — one `DELETE` per row, which a million audit lines turn into a million statements. `bulk: true`
+reads identifiers in batches and issues one `DELETE ... WHERE id IN (...)` per batch, without hydrating anything:
+
+```php
+#[Purgeable(field: 'createdAt', interval: '%app.audit_retention%', bulk: true)]
+```
+
+⚠️ **Bulk never deletes around a cascade.** It skips the ORM, so it is **refused** — the purge stops with the
+reason before deleting anything — for an entity that has a `cascade: ['remove']` or `orphanRemoval` association,
+a `preRemove`/`postRemove` lifecycle callback or entity listener, or a `condition`. Database `ON DELETE CASCADE`
+foreign keys still apply: the database does them. `EntityPurgedEvent` is still dispatched once per row (the
+organisation is read in the same query when the entity maps `organizationId` or an `organization` association).
+
 **Measure before you commit to an interval.** `--dry-run` reports the row count, and a
 policy that looks reasonable can turn out to delete most of a table on its first run.
 

@@ -34,6 +34,13 @@ final class Purgeable
         public readonly string $interval,
         /** Optional ExpressionLanguage condition; the row is exposed as `entity`. */
         public readonly string $condition = '',
+        /**
+         * Delete by batches of identifiers, without hydrating a row — for high-volume tables (an audit trail).
+         * ⚠️ Opt-in, and REFUSED for an entity whose removal the ORM propagates or observes (`cascade: remove`,
+         * `orphanRemoval`, a remove lifecycle callback or entity listener) or that has a condition: bulk never
+         * deletes around a cascade. Database `ON DELETE CASCADE` foreign keys still apply.
+         */
+        public readonly bool $bulk = false,
     ) {
     }
 }

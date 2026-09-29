@@ -10,12 +10,15 @@ use Doctrine\ORM\Events;
 use Doctrine\ORM\Tools\SchemaTool;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Event\EntityPurgedEvent;
+use Jul6Art\CoreBundle\Tests\Fixtures\Entity\BulkPurgeableEntry;
+use Jul6Art\CoreBundle\Tests\Fixtures\Entity\BulkPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\ConditionalPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\ParametrisedPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\PurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\RepeatablePurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\Widget;
 use PHPUnit\Framework\Attributes\CoversNothing;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -52,7 +55,11 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
             $this->entityManager->getClassMetadata(ConditionalPurgeableLog::class),
             $this->entityManager->getClassMetadata(RepeatablePurgeableLog::class),
             $this->entityManager->getClassMetadata(ParametrisedPurgeableLog::class),
+            $this->entityManager->getClassMetadata(BulkPurgeableLog::class),
+            $this->entityManager->getClassMetadata(BulkPurgeableEntry::class),
         ]);
+        // ⚠️ SQLite enforces foreign keys only when asked: the database cascade is what bulk relies on.
+        $this->entityManager->getConnection()->executeStatement('PRAGMA foreign_keys = ON');
 
         $dispatcher = $this->container->get('event_dispatcher');
         self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
@@ -348,6 +355,66 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
     {
         $this->entityManager->persist(new ParametrisedPurgeableLog(new \DateTimeImmutable($age)));
         $this->entityManager->flush();
+    }
+
+    /**
+     * ⚠️ Bulk: one DELETE per batch of identifiers, never one per row — and the DATABASE cascade still applies.
+     */
+    public function testBulkDeletesByBatchAndKeepsTheDatabaseCascade(): void
+    {
+        for ($i = 0; $i < 7; ++$i) {
+            $old = new BulkPurgeableLog(new \DateTimeImmutable('-4 months'), 42);
+            $this->entityManager->persist($old);
+            $this->entityManager->persist(new BulkPurgeableEntry($old));
+        }
+        $kept = new BulkPurgeableLog(new \DateTimeImmutable('-1 month'));
+        $this->entityManager->persist($kept);
+        $this->entityManager->persist(new BulkPurgeableEntry($kept));
+        $this->entityManager->flush();
+        $this->entityManager->clear();
+
+        $tester = $this->runPurge(['--entity' => 'BulkPurgeableLog']);
+
+        self::assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        self::assertSame(1, $this->countRows('bulk_purgeable_log'));
+        self::assertSame(1, $this->countRows('bulk_purgeable_entry'), 'The database cascade took the children of the purged rows.');
+        self::assertCount(7, $this->events, 'One event per purged row, bulk or not.');
+        self::assertSame(42, $this->events[0]->getOrganizationId());
+        self::assertStringContainsString('7 entities purged', $tester->getDisplay());
+
+        // Idempotent: a second run finds nothing.
+        $again = $this->runPurge(['--entity' => 'BulkPurgeableLog']);
+        self::assertStringContainsString('Nothing to purge', $again->getDisplay());
+    }
+
+    /** Bulk reads identifiers in batches: with a batch of 3, seven rows take three DELETE statements. */
+    public function testBulkIssuesOneDeletePerBatch(): void
+    {
+        for ($i = 0; $i < 7; ++$i) {
+            $this->entityManager->persist(new BulkPurgeableLog(new \DateTimeImmutable('-4 months')));
+        }
+        $this->entityManager->flush();
+        $this->entityManager->clear();
+
+        $command = $this->container->get(PurgeCommand::class);
+        self::assertInstanceOf(PurgeCommand::class, $command);
+        $tester = new CommandTester($command);
+        $tester->execute(['--entity' => 'BulkPurgeableLog'], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE]);
+
+        self::assertStringContainsString('BulkPurgeableLog: 7 entities purged in bulk (3 batches', $tester->getDisplay());
+        self::assertSame(0, $this->countRows('bulk_purgeable_log'));
+    }
+
+    public function testBulkDryRunDeletesNothing(): void
+    {
+        $this->entityManager->persist(new BulkPurgeableLog(new \DateTimeImmutable('-4 months')));
+        $this->entityManager->flush();
+
+        $tester = $this->runPurge(['--entity' => 'BulkPurgeableLog', '--dry-run' => true]);
+
+        self::assertSame(1, $this->countRows('bulk_purgeable_log'));
+        self::assertStringContainsString('1 entities would be purged', $tester->getDisplay());
+        self::assertSame([], $this->events);
     }
 
     /** @param array<string, mixed> $input */

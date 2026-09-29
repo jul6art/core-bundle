@@ -7,6 +7,7 @@ namespace Jul6Art\CoreBundle\Command;
 use Doctrine\ORM\EntityManagerInterface;
 use Jul6Art\CoreBundle\Attribute\Purgeable;
 use Jul6Art\CoreBundle\Event\EntityPurgedEvent;
+use Jul6Art\CoreBundle\Service\BulkPurgeGuard;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -99,6 +100,20 @@ final class PurgeCommand extends Command
         $expressionLanguage = null;
         $total = 0;
 
+        // ⚠️ Every bulk policy is checked BEFORE anything is deleted: a refused one stops the run with its reason,
+        // rather than purging half the tables and failing on the next.
+        try {
+            foreach ($this->policies($entityFilter) as [$metadata, , $purgeable]) {
+                if ($purgeable->bulk) {
+                    BulkPurgeGuard::assertSafe($metadata, $purgeable);
+                }
+            }
+        } catch (\LogicException $refusal) {
+            $io->error($refusal->getMessage());
+
+            return Command::FAILURE;
+        }
+
         foreach ($this->entityManager->getMetadataFactory()->getAllMetadata() as $metadata) {
             $reflection = new \ReflectionClass($metadata->getName());
             $attributes = $reflection->getAttributes(Purgeable::class);
@@ -122,7 +137,9 @@ final class PurgeCommand extends Command
                     $expressionLanguage ??= new ExpressionLanguage();
                 }
 
-                $total += $this->purgeOne($io, $metadata->getName(), $shortName, $purgeable, $expressionLanguage, $dryRun);
+                $total += $purgeable->bulk
+                    ? $this->purgeBulk($io, $metadata, $shortName, $purgeable, $dryRun)
+                    : $this->purgeOne($io, $metadata->getName(), $shortName, $purgeable, $expressionLanguage, $dryRun);
             }
         }
 
@@ -233,6 +250,102 @@ final class PurgeCommand extends Command
                 $this->interval($purgeable),
                 '' !== $purgeable->condition ? ', condition: '.$purgeable->condition : '',
             ));
+        }
+
+        return $count;
+    }
+
+    /**
+     * The purge policies, in metadata order, optionally narrowed to one entity.
+     *
+     * @return list<array{0: \Doctrine\ORM\Mapping\ClassMetadata<object>, 1: string, 2: Purgeable}>
+     */
+    private function policies(?string $entityFilter): array
+    {
+        $policies = [];
+
+        foreach ($this->entityManager->getMetadataFactory()->getAllMetadata() as $metadata) {
+            $reflection = new \ReflectionClass($metadata->getName());
+            if (null !== $entityFilter && $reflection->getShortName() !== $entityFilter) {
+                continue;
+            }
+            foreach ($reflection->getAttributes(Purgeable::class) as $attribute) {
+                $policies[] = [$metadata, $reflection->getShortName(), $attribute->newInstance()];
+            }
+        }
+
+        return $policies;
+    }
+
+    /**
+     * ⚠️ **Bulk**: identifiers in batches, one `DELETE ... WHERE id IN (...)` per batch — no row is hydrated, so a
+     * million audit lines take ten thousand statements, not a million, in constant memory. Only reached for a
+     * policy {@see BulkPurgeGuard} accepted: nothing the ORM would do on remove is skipped. Database cascades apply.
+     *
+     * The purge event is still dispatched once per row, with the organisation read in the same query.
+     *
+     * @param \Doctrine\ORM\Mapping\ClassMetadata<object> $metadata
+     */
+    private function purgeBulk(SymfonyStyle $io, \Doctrine\ORM\Mapping\ClassMetadata $metadata, string $shortName, Purgeable $purgeable, bool $dryRun): int
+    {
+        $className = $metadata->getName();
+        $threshold = new \DateTimeImmutable($this->interval($purgeable));
+        $organization = match (true) {
+            $metadata->hasField('organizationId') => 'e.organizationId',
+            $metadata->hasAssociation('organization') => 'IDENTITY(e.organization)',
+            default => null,
+        };
+        $count = 0;
+        $batches = 0;
+        $lastId = null;
+
+        while (true) {
+            $builder = $this->entityManager->createQueryBuilder()
+                ->select('e.id AS id'.(null !== $organization ? ', '.$organization.' AS organizationId' : ''))
+                ->from($className, 'e')
+                ->where(\sprintf('e.%s < :threshold', $purgeable->field))
+                ->setParameter('threshold', $threshold)
+                ->orderBy('e.id', \SortDirection::Ascending)
+                ->setMaxResults($this->batchSize);
+            if (null !== $lastId) {
+                $builder->andWhere('e.id > :lastId')->setParameter('lastId', $lastId);
+            }
+
+            /** @var list<array{id: int|string, organizationId?: int|string|null}> $rows */
+            $rows = $builder->getQuery()->getScalarResult();
+            if ([] === $rows) {
+                break;
+            }
+
+            $ids = array_map(static fn (array $row): int|string => $row['id'], $rows);
+            $lastId = end($ids);
+            $count += \count($ids);
+            ++$batches;
+
+            if ($dryRun) {
+                continue;
+            }
+
+            $this->entityManager->createQuery(\sprintf('DELETE FROM %s e WHERE e.id IN (:ids)', $className))
+                ->setParameter('ids', $ids)
+                ->execute();
+
+            foreach ($rows as $row) {
+                $this->eventDispatcher->dispatch(
+                    new EntityPurgedEvent(
+                        entityClass: $className,
+                        entityShortName: $shortName,
+                        entityId: $row['id'],
+                        organizationId: isset($row['organizationId']) && is_numeric($row['organizationId']) ? (int) $row['organizationId'] : null,
+                        interval: $this->interval($purgeable),
+                    ),
+                    EntityPurgedEvent::NAME,
+                );
+            }
+        }
+
+        if ($count > 0) {
+            $io->info(\sprintf('%s: %d entities %s in bulk (%d batches, field: %s, interval: %s)', $shortName, $count, $dryRun ? 'to purge' : 'purged', $batches, $purgeable->field, $this->interval($purgeable)));
         }
 
         return $count;
