@@ -11,6 +11,7 @@ use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
 use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
+use Jul6Art\CoreBundle\Logger\QueryStringRedaction;
 use Jul6Art\CoreBundle\Performance\CacheClearer\PerformanceStoreClearer;
 use Jul6Art\CoreBundle\Performance\CacheWarmer\PerformanceStoreWarmer;
 use Jul6Art\CoreBundle\Performance\Command\ClearCommand;
@@ -105,11 +106,11 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             return;
         }
 
-        $parameters = $config['parameters'] ?? QueryStringRedactingProcessor::DEFAULT_PARAMETERS;
+        $parameters = $config['parameters'] ?? QueryStringRedaction::DEFAULT_PARAMETERS;
 
         $container->register(QueryStringRedactingProcessor::class, QueryStringRedactingProcessor::class)
-            ->setArguments([\is_array($parameters) ? array_values(array_filter($parameters, \is_string(...))) : QueryStringRedactingProcessor::DEFAULT_PARAMETERS])
-            ->addTag('monolog.processor', ['priority' => QueryStringRedactingProcessor::PRIORITY]);
+            ->setArguments([\is_array($parameters) ? array_values(array_filter($parameters, \is_string(...))) : QueryStringRedaction::DEFAULT_PARAMETERS])
+            ->addTag('monolog.processor', ['priority' => QueryStringRedaction::PRIORITY]);
     }
 
     /**

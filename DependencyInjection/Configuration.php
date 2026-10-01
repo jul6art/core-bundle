@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\DependencyInjection;
 
-use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
+use Jul6Art\CoreBundle\Logger\QueryStringRedaction;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
@@ -113,7 +113,7 @@ class Configuration implements ConfigurationInterface
                                     ->thenInvalid('A redacted query parameter name must be a non-empty string, got %s.')
                                 ->end()
                             ->end()
-                            ->defaultValue(QueryStringRedactingProcessor::DEFAULT_PARAMETERS)
+                            ->defaultValue(QueryStringRedaction::DEFAULT_PARAMETERS)
                         ->end()
                     ->end()
                 ->end()

@@ -38,15 +38,18 @@ use Monolog\Processor\ProcessorInterface;
  */
 final readonly class QueryStringRedactingProcessor implements ProcessorInterface
 {
-    /** @var list<string> */
-    public const array DEFAULT_PARAMETERS = ['_hash', 'token', '_token', 'q', 'search'];
+    /**
+     * Kept for the code that already reads it here. ⚠️ Code that runs without Monolog reads
+     * {@see QueryStringRedaction} instead: reading this constant loads the Monolog interface.
+     *
+     * @var list<string>
+     */
+    public const array DEFAULT_PARAMETERS = QueryStringRedaction::DEFAULT_PARAMETERS;
 
     /**
-     * ⚠️ **Low, so it runs LAST among the logger's processors**: one that copies the URI into the
-     * record (`WebProcessor`'s `url` and `referrer`) must run before it, or the copy stays in clear.
-     * Handler-level processors still run after it — they are for the project to order.
+     * Same as {@see self::DEFAULT_PARAMETERS}: kept here, read from {@see QueryStringRedaction}.
      */
-    public const int PRIORITY = -1024;
+    public const int PRIORITY = QueryStringRedaction::PRIORITY;
 
     private string $pattern;
 
