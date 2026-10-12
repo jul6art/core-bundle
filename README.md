@@ -791,6 +791,12 @@ public function bulkPublish(Request $request, BulkActionRunner $runner): Respons
 
 The return value is the number of rows the action actually ran on — what a flash should report.
 
+**Ids are read according to the entity's identifier type.** An integer identifier keeps positive
+integers only. Any other identifier — a UUID, a ULID, a string key — is kept as a string, provided
+the identifier's own Doctrine type accepts it; an id the type would refuse is dropped instead of
+failing the query. Before 3.5, every id went through `intval()`: unusable on a UUID-keyed entity,
+and `intval('01a1…')` is `1`.
+
 **Throw `\DomainException` to refuse one row.** It is caught per row, so a rule refusing one
 invoice does not cost the other twenty-four. Any other throwable rolls the **whole batch** back:
 a database error signals corruption that must not leave a half-persisted state. The batch runs in

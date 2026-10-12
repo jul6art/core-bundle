@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\Controller;
 
+use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
@@ -42,6 +43,9 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
  */
 final class BulkActionRunner
 {
+    /** Identifier types read as positive integers — the historical behaviour. */
+    private const array INTEGER_TYPES = ['integer', 'bigint', 'smallint'];
+
     /**
      * @param string $softDeleteFilterName Doctrine filter suspended by {@see runOnSoftDeleted()}.
      *                                     Match the name declared in `doctrine.orm.filters`.
@@ -72,7 +76,7 @@ final class BulkActionRunner
     ): int {
         $this->assertCsrfToken($request, $csrfTokenId);
 
-        $ids = self::selectedIds($request);
+        $ids = $this->selectedIds($request, $entityClass);
 
         if ([] === $ids) {
             return 0;
@@ -110,7 +114,7 @@ final class BulkActionRunner
     ): int {
         $this->assertCsrfToken($request, $csrfTokenId);
 
-        $ids = self::selectedIds($request);
+        $ids = $this->selectedIds($request, $entityClass);
 
         if ([] === $ids) {
             return 0;
@@ -148,14 +152,57 @@ final class BulkActionRunner
     }
 
     /**
-     * @return list<int>
+     * The posted ids, read according to the entity's identifier TYPE.
+     *
+     * An integer identifier keeps the historical reading: positive integers, anything else
+     * dropped. Any other identifier (a UUID, a ULID, a string key) is kept as a string, but only
+     * if the identifier's own Doctrine type accepts it: an id the type would refuse is dropped
+     * here rather than turned into a conversion error — a 500 — inside the `findBy()`.
+     *
+     * ⚠️ `intval()` on a UUID is not an error, it is a WRONG ROW: `intval('01a1…')` is `1`.
+     * Reading every identifier as an integer made the runner unusable on UUID-keyed entities, and
+     * silently aimed at row 1 on a table that would accept it.
+     *
+     * @param class-string $entityClass
+     *
+     * @return list<int|string>
      */
-    private static function selectedIds(Request $request): array
+    private function selectedIds(Request $request, string $entityClass): array
     {
-        return array_values(array_unique(array_filter(
-            array_map(intval(...), $request->request->all('ids')),
-            static fn (int $id): bool => $id > 0,
-        )));
+        $posted = $request->request->all('ids');
+        $metadata = $this->entityManager->getClassMetadata($entityClass);
+        $field = $metadata->getIdentifierFieldNames()[0] ?? 'id';
+        $type = $metadata->getTypeOfField($field);
+
+        if (null === $type || \in_array($type, self::INTEGER_TYPES, true)) {
+            return array_values(array_unique(array_filter(
+                array_map(intval(...), $posted),
+                static fn (int $id): bool => $id > 0,
+            )));
+        }
+
+        $doctrineType = Type::hasType($type) ? Type::getType($type) : null;
+        $platform = null === $doctrineType ? null : $this->entityManager->getConnection()->getDatabasePlatform();
+        $ids = [];
+        foreach ($posted as $value) {
+            if (!\is_string($value) && !\is_int($value)) {
+                continue;
+            }
+            $value = trim((string) $value);
+            if ('' === $value || \strlen($value) > 255) {
+                continue;
+            }
+            if (null !== $doctrineType && null !== $platform) {
+                try {
+                    $doctrineType->convertToDatabaseValue($value, $platform);
+                } catch (\Throwable) {
+                    continue;
+                }
+            }
+            $ids[] = $value;
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**

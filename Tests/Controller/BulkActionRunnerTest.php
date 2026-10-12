@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\Tests\Controller;
 
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
+use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Mapping\ClassMetadata;
 use Jul6Art\CoreBundle\Controller\BulkActionRunner;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\Widget;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\WidgetUser;
@@ -61,6 +66,50 @@ final class BulkActionRunnerTest extends TestCase
         $this->entityManager->expects(self::never())->method('getRepository');
 
         self::assertSame(0, $this->runner()->run($this->request(['0', '-3', 'abc', '']), Widget::class, 'EDIT', $this->action()));
+    }
+
+    /**
+     * A UUID-keyed entity: ids stay strings. `intval('01a1…')` would have been `1` — a WRONG row on a
+     * table that accepts it, a conversion error on one that does not.
+     */
+    public function testNonIntegerIdentifiersAreKeptAsStrings(): void
+    {
+        $this->identifierType('guid');
+        $repository = $this->createMock(EntityRepository::class);
+        $repository->expects(self::once())->method('findBy')
+            ->with(['id' => ['01a12d8c-ae83-7e4d-8480-70cd4b8a4efa', '01a12d8c-ae80-7df5-9fcd-8f0bbfa856d9']])
+            ->willReturn([]);
+        $this->entityManager->expects(self::once())->method('getRepository')->with(Widget::class)->willReturn($repository);
+
+        $this->runner()->run($this->request(['01a12d8c-ae83-7e4d-8480-70cd4b8a4efa', ' 01a12d8c-ae80-7df5-9fcd-8f0bbfa856d9 ', '01a12d8c-ae83-7e4d-8480-70cd4b8a4efa', '']), Widget::class, 'EDIT', $this->action());
+    }
+
+    /** An id the identifier type would refuse is dropped here, not turned into a 500 by the query. */
+    public function testIdsTheIdentifierTypeRefusesAreDropped(): void
+    {
+        if (!Type::hasType('test_strict_uid')) {
+            Type::getTypeRegistry()->register('test_strict_uid', new class extends Type {
+                public function getSQLDeclaration(array $column, AbstractPlatform $platform): string
+                {
+                    return 'CHAR(36)';
+                }
+
+                public function convertToDatabaseValue(mixed $value, AbstractPlatform $platform): mixed
+                {
+                    if (!\is_string($value) || 1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value)) {
+                        throw new \InvalidArgumentException('not a UUID');
+                    }
+
+                    return $value;
+                }
+            });
+        }
+        $this->identifierType('test_strict_uid');
+        $repository = $this->createMock(EntityRepository::class);
+        $repository->expects(self::once())->method('findBy')->with(['id' => ['01a12d8c-ae83-7e4d-8480-70cd4b8a4efa']])->willReturn([]);
+        $this->entityManager->expects(self::once())->method('getRepository')->with(Widget::class)->willReturn($repository);
+
+        $this->runner()->run($this->request(['01a12d8c-ae83-7e4d-8480-70cd4b8a4efa', '1', 'garbage', "x'; DROP"]), Widget::class, 'EDIT', $this->action());
     }
 
     /** One SELECT for N rows, not N — the reason this helper exists rather than a loop of find(). */
@@ -187,6 +236,17 @@ final class BulkActionRunnerTest extends TestCase
         $repository->method('findBy')->willReturn($widgets);
         // A real expectation, not a convenience: one repository lookup per batch.
         $this->entityManager->expects(self::once())->method('getRepository')->willReturn($repository);
+    }
+
+    private function identifierType(string $type): void
+    {
+        $metadata = self::createStub(ClassMetadata::class);
+        $metadata->method('getIdentifierFieldNames')->willReturn(['id']);
+        $metadata->method('getTypeOfField')->willReturn($type);
+        $this->entityManager->method('getClassMetadata')->willReturn($metadata);
+        $connection = self::createStub(Connection::class);
+        $connection->method('getDatabasePlatform')->willReturn(new SQLitePlatform());
+        $this->entityManager->method('getConnection')->willReturn($connection);
     }
 
     /** @param list<int|string> $ids */
