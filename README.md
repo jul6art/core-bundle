@@ -175,6 +175,31 @@ core:
 > And `csp_enforce: true` before reading the violation reports is how a working page stops
 > loading its own assets — report-only first, always.
 
+**An inline script goes through by the page's nonce.** `script-src 'self'` refuses every inline
+`<script>`, and that refusal is what makes the policy worth having. A script the page needs inline
+— an anti-FOUC that must run before the first paint, the token a layout hands to the API client —
+asks for the nonce:
+
+```twig
+<script nonce="{{ csp_nonce() }}">window.jwtToken = {{ jwt_token()|json_encode|raw }};</script>
+```
+
+The nonce is drawn the first time a template asks, once per page, and the listener adds
+`'nonce-…'` to `script-src` (to `script-src-elem` too when the policy has one; without
+`script-src`, to one copied from `default-src`). `style-src` is never touched: a nonce there would
+switch off the `'unsafe-inline'` that keeps `style="…"` attributes working. Nor is a `script-src`
+that already lets every inline script through with `'unsafe-inline'`.
+
+- **A page that never asks sends its policy unchanged.** That is what keeps a page served by a
+  shared cache (`s-maxage`) clean: a nonce cached with it would be the same for every visitor.
+  Such a page cites its fixed inline scripts by their hash in `csp_policy` instead
+  (`'sha256-…'`, what the browser's console prints next to the violation).
+- **`csp_nonce()` exists even with `security_headers` off**, so a shared template can always
+  write the attribute; without a policy the browser ignores it.
+- **An inline event handler (`onclick="…"`) has no nonce.** It is blocked like an inline script,
+  and the fix is a listener in a script file, never `'unsafe-inline'`. Likewise `eval` and
+  `new Function`, which need `'unsafe-eval'`.
+
 Captcha
 -------
 

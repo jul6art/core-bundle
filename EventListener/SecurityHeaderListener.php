@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\EventListener;
 
+use Jul6Art\CoreBundle\Security\CspNonce;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 
@@ -16,7 +17,9 @@ use Symfony\Component\HttpKernel\Event\ResponseEvent;
  * - the **hard headers** (nosniff, Referrer-Policy, X-Frame-Options, Permissions-Policy,
  *   HSTS) are set on every response; they rarely break anything;
  * - the **Content-Security-Policy** starts in report-only mode, because a wrong policy breaks
- *   pages silently. Watch the reports, then flip `csp_enforce`.
+ *   pages silently. Watch the reports, then flip `csp_enforce`. An inline script gets through by
+ *   the page's nonce (`{{ csp_nonce() }}`, {@see CspNonce}), added to `script-src` only on a page
+ *   that asked for one.
  *
  * Only **missing** headers are filled, so a controller that set its own keeps it — a CMS
  * preview needing `SAMEORIGIN` to survive its own iframe still works.
@@ -95,11 +98,66 @@ final readonly class SecurityHeaderListener
             self::setIfMissing($event->getResponse(), $name, $value);
         }
 
+        $policy = $this->cspPolicy ?? implode('; ', self::DEFAULT_CSP);
+        $nonce = CspNonce::of($event->getRequest());
+
         self::setIfMissing(
             $event->getResponse(),
             $this->cspEnforce ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only',
-            $this->cspPolicy ?? implode('; ', self::DEFAULT_CSP),
+            null === $nonce ? $policy : self::allowNonce($policy, $nonce),
         );
+    }
+
+    /**
+     * Adds the page's nonce ({@see CspNonce}) to the directives that govern inline scripts.
+     *
+     * Without `script-src`, the browser reads `default-src`: the nonce goes into a `script-src`
+     * copied from it. A directive that already lets every inline script through (`'unsafe-inline'`
+     * with no hash and no nonce) is left alone — a nonce would switch `'unsafe-inline'` off and
+     * block the very scripts that policy was written for. `style-src` is never touched, for the
+     * same reason: its `'unsafe-inline'` is what keeps the `style="…"` attributes working.
+     */
+    private static function allowNonce(string $policy, string $nonce): string
+    {
+        $directives = [];
+        foreach (explode(';', $policy) as $directive) {
+            $tokens = preg_split('/\s+/', trim($directive), -1, \PREG_SPLIT_NO_EMPTY);
+            if (\is_array($tokens) && [] !== $tokens) {
+                $directives[] = $tokens;
+            }
+        }
+
+        $names = array_map(static fn (array $tokens): string => strtolower($tokens[0]), $directives);
+        $fallback = array_search('default-src', $names, true);
+
+        if (!\in_array('script-src', $names, true) && false !== $fallback) {
+            $directives[] = ['script-src', ...\array_slice($directives[$fallback], 1)];
+            $names[] = 'script-src';
+        }
+
+        foreach ($directives as $i => $tokens) {
+            if (\in_array($names[$i], ['script-src', 'script-src-elem'], true) && !self::allowsEveryInlineScript($tokens)) {
+                $directives[$i][] = "'nonce-".$nonce."'";
+            }
+        }
+
+        return implode('; ', array_map(static fn (array $tokens): string => implode(' ', $tokens), $directives));
+    }
+
+    /**
+     * @param list<string> $tokens a directive, its name first
+     */
+    private static function allowsEveryInlineScript(array $tokens): bool
+    {
+        $sources = array_map(strtolower(...), $tokens);
+
+        foreach ($sources as $source) {
+            if (str_starts_with($source, "'nonce-") || 1 === preg_match("/^'sha(256|384|512)-/", $source)) {
+                return false;
+            }
+        }
+
+        return \in_array("'unsafe-inline'", $sources, true);
     }
 
     private static function setIfMissing(Response $response, string $name, string $value): void

@@ -25,11 +25,13 @@ use Jul6Art\CoreBundle\Performance\Service\DashboardViewBuilder;
 use Jul6Art\CoreBundle\Performance\Service\PerformanceExporter;
 use Jul6Art\CoreBundle\Performance\Store\JsonlFileStore;
 use Jul6Art\CoreBundle\Performance\Store\PerformanceStoreInterface;
+use Jul6Art\CoreBundle\Security\CspNonce;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
+use Jul6Art\CoreBundle\Twig\CspExtension;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
 use Jul6Art\CoreBundle\Twig\PerformanceExtension;
 use Monolog\Formatter\HtmlFormatter;
@@ -81,6 +83,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
 
         $this->registerEncryption($container, \is_string($config['encryption_key'] ?? null) ? $config['encryption_key'] : null);
         $this->registerSecurityHeaders($container, \is_array($config['security_headers'] ?? null) ? $config['security_headers'] : []);
+        $this->registerCspNonce($container);
         $this->registerCaptcha($container, \is_array($config['captcha'] ?? null) ? $config['captcha'] : []);
         $this->registerFormatting($container, $config);
         $this->registerFlashTranslator($container, \is_array($config['flash'] ?? null) ? $config['flash'] : []);
@@ -256,6 +259,23 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             // Priority -100: run after the controllers and the other listeners have set their
             // own headers, since this one only fills the gaps.
             ->addTag('kernel.event_listener', ['event' => 'kernel.response', 'method' => 'onKernelResponse', 'priority' => -100]);
+    }
+
+    /**
+     * The page's nonce and its Twig function, registered even with `security_headers` off: a
+     * bundle's shell writes `nonce="{{ csp_nonce() }}"` without knowing whether the application
+     * sends a policy, and an unknown function would break its compilation.
+     */
+    private function registerCspNonce(ContainerBuilder $container): void
+    {
+        $container->register(CspNonce::class, CspNonce::class)
+            ->setArguments([new Reference('request_stack')]);
+
+        if (class_exists(AbstractExtension::class)) {
+            $container->register(CspExtension::class, CspExtension::class)
+                ->setArguments([new Reference(CspNonce::class)])
+                ->addTag('twig.extension');
+        }
     }
 
     /**

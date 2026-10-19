@@ -7,7 +7,10 @@ namespace Jul6Art\CoreBundle\Tests\DependencyInjection;
 use Jul6Art\CoreBundle\DependencyInjection\CoreExtension;
 use Jul6Art\CoreBundle\EntityListener\AbstractEntityListener;
 use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
+use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
+use Jul6Art\CoreBundle\Security\CspNonce;
+use Jul6Art\CoreBundle\Twig\CspExtension;
 use Monolog\Formatter\HtmlFormatter;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -32,6 +35,20 @@ final class CoreExtensionTest extends TestCase
 
         $calls = array_column($definition->getMethodCalls(), 0);
         self::assertSame(['setRequestStack', 'setTokenStorage', 'setTranslator'], $calls);
+    }
+
+    /**
+     * A bundle's shell writes `nonce="{{ csp_nonce() }}"` whether or not the application sends a
+     * policy: with `security_headers` off, an unknown function would break its compilation.
+     */
+    public function testTheCspNonceFunctionExistsEvenWithoutSecurityHeaders(): void
+    {
+        $container = $this->containerBuilder();
+        new CoreExtension()->load([], $container);
+
+        self::assertFalse($container->hasDefinition(SecurityHeaderListener::class));
+        self::assertTrue($container->hasDefinition(CspNonce::class));
+        self::assertTrue($container->getDefinition(CspExtension::class)->hasTag('twig.extension'));
     }
 
     public function testTheLogRedactionIsOnByDefaultWithItsDefaultParameters(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Tests\EventListener;
 
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
+use Jul6Art\CoreBundle\Security\CspNonce;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -78,6 +79,63 @@ final class SecurityHeaderListenerTest extends TestCase
         self::assertStringContainsString("frame-ancestors 'none'", $policy);
     }
 
+    // ── nonce ─────────────────────────────────────────────────────────────
+
+    /**
+     * A page that drew no nonce sends the policy as configured: a publicly cached page must not
+     * carry a value every visitor would share.
+     */
+    public function testAPageWithoutANonceSendsThePolicyUnchanged(): void
+    {
+        $policy = (string) $this->respond(cspPolicy: "default-src 'self'; script-src 'self'")->headers->get('Content-Security-Policy-Report-Only');
+
+        self::assertSame("default-src 'self'; script-src 'self'", $policy);
+    }
+
+    public function testTheNonceOfThePageJoinsScriptSrc(): void
+    {
+        $policy = (string) $this->respond(nonce: 'abc')->headers->get('Content-Security-Policy-Report-Only');
+
+        self::assertStringContainsString("script-src 'self' 'nonce-abc'", $policy);
+        self::assertStringContainsString("style-src 'self' 'unsafe-inline';", $policy, 'A nonce in style-src would switch its unsafe-inline off.');
+    }
+
+    public function testItJoinsAConfiguredPolicyNextToItsHashes(): void
+    {
+        $response = $this->respond(cspEnforce: true, cspPolicy: "default-src 'self'; script-src 'self' 'sha256-xyz='", nonce: 'abc');
+
+        self::assertSame("default-src 'self'; script-src 'self' 'sha256-xyz=' 'nonce-abc'", $response->headers->get('Content-Security-Policy'));
+    }
+
+    /** Without script-src the browser reads default-src: the nonce needs a script-src of its own. */
+    public function testWithoutScriptSrcTheNonceGoesIntoOneCopiedFromDefaultSrc(): void
+    {
+        $response = $this->respond(cspEnforce: true, cspPolicy: "default-src 'self' https://cdn.example.com; img-src *", nonce: 'abc');
+
+        self::assertSame(
+            "default-src 'self' https://cdn.example.com; img-src *; script-src 'self' https://cdn.example.com 'nonce-abc'",
+            $response->headers->get('Content-Security-Policy'),
+        );
+    }
+
+    public function testScriptSrcElemGetsTheNonceToo(): void
+    {
+        $response = $this->respond(cspEnforce: true, cspPolicy: "script-src 'self'; script-src-elem 'self'", nonce: 'abc');
+
+        self::assertSame("script-src 'self' 'nonce-abc'; script-src-elem 'self' 'nonce-abc'", $response->headers->get('Content-Security-Policy'));
+    }
+
+    /**
+     * A nonce would switch 'unsafe-inline' off: the policy that relied on it would block the very
+     * scripts it was written to let through.
+     */
+    public function testAPolicyThatAllowsEveryInlineScriptIsLeftAlone(): void
+    {
+        $response = $this->respond(cspEnforce: true, cspPolicy: "script-src 'self' 'unsafe-inline'", nonce: 'abc');
+
+        self::assertSame("script-src 'self' 'unsafe-inline'", $response->headers->get('Content-Security-Policy'));
+    }
+
     // ── surcharges ────────────────────────────────────────────────────────
 
     public function testAConfiguredHeaderOverridesTheDefault(): void
@@ -132,10 +190,11 @@ final class SecurityHeaderListenerTest extends TestCase
         bool $cspEnforce = false,
         ?string $cspPolicy = null,
         array $headers = [],
+        ?string $nonce = null,
     ): Response {
         $response = new Response();
 
-        $this->listener($enabled, $cspEnforce, $cspPolicy, $headers)->onKernelResponse($this->event($response));
+        $this->listener($enabled, $cspEnforce, $cspPolicy, $headers)->onKernelResponse($this->event($response, nonce: $nonce));
 
         return $response;
     }
@@ -150,8 +209,13 @@ final class SecurityHeaderListenerTest extends TestCase
         return new SecurityHeaderListener($enabled, $cspEnforce, $cspPolicy, $headers);
     }
 
-    private function event(Response $response, int $type = HttpKernelInterface::MAIN_REQUEST): ResponseEvent
+    private function event(Response $response, int $type = HttpKernelInterface::MAIN_REQUEST, ?string $nonce = null): ResponseEvent
     {
-        return new ResponseEvent(self::createStub(HttpKernelInterface::class), Request::create('/'), $type, $response);
+        $request = Request::create('/');
+        if (null !== $nonce) {
+            $request->attributes->set(CspNonce::ATTRIBUTE, $nonce);
+        }
+
+        return new ResponseEvent(self::createStub(HttpKernelInterface::class), $request, $type, $response);
     }
 }
