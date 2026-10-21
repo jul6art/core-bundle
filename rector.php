@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRector;
 use Rector\Config\RectorConfig;
 use Rector\Php80\Rector\Class_\ClassPropertyAssignToConstructorPromotionRector;
+use Rector\Symfony\Symfony80\Rector\Class_\RemoveEraseCredentialsRector;
 
 return RectorConfig::configure()
     ->withPaths([
@@ -42,5 +43,10 @@ return RectorConfig::configure()
         ClassPropertyAssignToConstructorPromotionRector::class => [
             __DIR__.'/Tests/Fixtures/Entity',
         ],
+        // ⚠️ `eraseCredentials()` left `UserInterface` in Symfony 8, and Rector reasons on the version
+        // installed locally: it removes the method from the test users. It is still declared by the
+        // interface on 7.4, where the classes would turn abstract and fail to load — the `lowest deps`
+        // job. A bundle promising `^7.4 || ^8.0` keeps both. Same skip as admin-bundle.
+        RemoveEraseCredentialsRector::class,
     ])
     ->withImportNames(importShortClasses: false, removeUnusedImports: true);
