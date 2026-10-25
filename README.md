@@ -250,7 +250,7 @@ class AuditLog { … }
 ```
 
 ```shell
-bin/console core:purge --dry-run          # says what it would remove, removes nothing
+bin/console core:purge --dry-run          # every policy and its retention, what it would remove; removes nothing
 bin/console core:purge --entity=AuditLog  # one entity only
 bin/console core:purge
 ```

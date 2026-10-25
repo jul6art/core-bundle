@@ -250,6 +250,8 @@ final class PurgeCommand extends Command
                 $this->interval($purgeable),
                 '' !== $purgeable->condition ? ', condition: '.$purgeable->condition : '',
             ));
+        } elseif ($dryRun) {
+            $this->nothingToPurge($io, $shortName, $purgeable);
         }
 
         return $count;
@@ -346,9 +348,26 @@ final class PurgeCommand extends Command
 
         if ($count > 0) {
             $io->info(\sprintf('%s: %d entities %s in bulk (%d batches, field: %s, interval: %s)', $shortName, $count, $dryRun ? 'to purge' : 'purged', $batches, $purgeable->field, $this->interval($purgeable)));
+        } elseif ($dryRun) {
+            $this->nothingToPurge($io, $shortName, $purgeable);
         }
 
         return $count;
+    }
+
+    /**
+     * A dry run names EVERY policy, even one with nothing to purge today: it is the retention table of the
+     * application, read from the code — what a privacy register checks against (`core:purge --dry-run`).
+     */
+    private function nothingToPurge(SymfonyStyle $io, string $shortName, Purgeable $purgeable): void
+    {
+        $io->text(\sprintf(
+            '%s: nothing to purge (field: %s, interval: %s%s)',
+            $shortName,
+            $purgeable->field,
+            $this->interval($purgeable),
+            '' !== $purgeable->condition ? ', condition: '.$purgeable->condition : '',
+        ));
     }
 
     /**

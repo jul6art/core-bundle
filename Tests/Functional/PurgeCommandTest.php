@@ -159,6 +159,28 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
         self::assertStringContainsString('would be purged', $tester->getDisplay());
     }
 
+    /** A dry run is the application's retention table: every policy, with its retention, even with nothing to purge. */
+    public function testDryRunNamesEveryPolicyWithItsRetention(): void
+    {
+        $display = $this->runPurge(['--dry-run' => true])->getDisplay();
+
+        foreach ([
+            'PurgeableLog: nothing to purge (field: createdAt, interval: -3 months)',
+            'ConditionalPurgeableLog: nothing to purge (field: createdAt, interval: -1 month, condition: entity.isObsolete())',
+            'RepeatablePurgeableLog: nothing to purge (field: createdAt, interval: -2 years)',
+            'RepeatablePurgeableLog: nothing to purge (field: deletedAt, interval: -1 week)',
+            'BulkPurgeableLog: nothing to purge (field: createdAt, interval: -3 months)',
+        ] as $line) {
+            self::assertStringContainsString($line, $display);
+        }
+    }
+
+    /** A real run stays quiet about the policies with nothing to purge. */
+    public function testARealRunNamesOnlyWhatItPurged(): void
+    {
+        self::assertStringNotContainsString('nothing to purge (', $this->runPurge([])->getDisplay());
+    }
+
     /** A dry run must not tell an audit trail that rows were purged. */
     public function testDryRunDispatchesNoEvent(): void
     {
