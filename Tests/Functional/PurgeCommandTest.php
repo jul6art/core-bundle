@@ -16,6 +16,7 @@ use Jul6Art\CoreBundle\Tests\Fixtures\Entity\ConditionalPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\ParametrisedPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\PurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\RepeatablePurgeableLog;
+use Jul6Art\CoreBundle\Tests\Fixtures\Entity\UuidConditionalPurgeableLog;
 use Jul6Art\CoreBundle\Tests\Fixtures\Entity\Widget;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * The purge against a real database. Row counts are read through raw SQL so the ORM identity
@@ -53,6 +55,7 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
             $this->entityManager->getClassMetadata(Widget::class),
             $this->entityManager->getClassMetadata(PurgeableLog::class),
             $this->entityManager->getClassMetadata(ConditionalPurgeableLog::class),
+            $this->entityManager->getClassMetadata(UuidConditionalPurgeableLog::class),
             $this->entityManager->getClassMetadata(RepeatablePurgeableLog::class),
             $this->entityManager->getClassMetadata(ParametrisedPurgeableLog::class),
             $this->entityManager->getClassMetadata(BulkPurgeableLog::class),
@@ -224,6 +227,45 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
         $this->runPurge([]);
 
         self::assertSame(1, $this->countRows('conditional_purgeable_log'), 'A row that is old but not obsolete must survive.');
+    }
+
+    /**
+     * ⚠️ Un identifiant OBJET (Uuid) : le curseur doit passer les lignes que la condition garde. Lu
+     * comme un scalaire, il restait à null, et chaque lot relisait la même fenêtre — une purge sans
+     * fin, qui bloquait le worker Messenger du Scheduler jusqu'à son SIGKILL (constaté en
+     * production le 2026-10-30 : des chandeliers d'un an, gardés, sous un identifiant Uuid).
+     */
+    public function testTheCursorStepsOverKeptRowsWithAnObjectIdentifier(): void
+    {
+        for ($i = 0; $i < 7; ++$i) {
+            $this->uuidLog('-2 months', obsolete: false);
+        }
+        $purged = $this->uuidLog('-2 months', obsolete: true);
+        $this->uuidLog('-2 months', obsolete: true);
+
+        $tester = $this->runPurge(['--entity' => 'UuidConditionalPurgeableLog']);
+
+        self::assertSame(0, $tester->getStatusCode());
+        self::assertSame(7, $this->countRows('uuid_conditional_purgeable_log'), 'Only the obsolete rows go.');
+        self::assertCount(2, $this->events);
+        self::assertContains(
+            $purged->toRfc4122(),
+            array_map(static fn (EntityPurgedEvent $event): int|string|null => $event->getEntityId(), $this->events),
+            'The event names the purged row by its identifier as a string.',
+        );
+    }
+
+    /** Nothing is deleted in a dry run: only the cursor moves the window forward. */
+    public function testADryRunEndsWithAnObjectIdentifier(): void
+    {
+        for ($i = 0; $i < 7; ++$i) {
+            $this->uuidLog('-2 months', obsolete: $i < 2);
+        }
+
+        $tester = $this->runPurge(['--entity' => 'UuidConditionalPurgeableLog', '--dry-run' => true]);
+
+        self::assertSame(7, $this->countRows('uuid_conditional_purgeable_log'));
+        self::assertStringContainsString('2 entities would be purged', $tester->getDisplay());
     }
 
     // ── attribut répétable ────────────────────────────────────────────────
@@ -464,6 +506,15 @@ final class PurgeCommandTest extends AbstractFunctionalTestCase
     {
         $this->entityManager->persist(new ConditionalPurgeableLog(new \DateTimeImmutable($age), $obsolete));
         $this->entityManager->flush();
+    }
+
+    private function uuidLog(string $age, bool $obsolete): Uuid
+    {
+        $log = new UuidConditionalPurgeableLog(new \DateTimeImmutable($age), $obsolete);
+        $this->entityManager->persist($log);
+        $this->entityManager->flush();
+
+        return $log->getId();
     }
 
     private function repeatableLog(string $createdAge, ?string $deletedAge): void

@@ -167,6 +167,12 @@ final class PurgeCommand extends Command
      * it removed. The cursor also makes `--dry-run` terminate — nothing is deleted there, so an
      * unmoved window would loop forever.
      *
+     * ⚠️ The cursor is the identifier's RAW value, bound with its Doctrine type. An object identifier
+     * (a Uuid) read as a scalar stayed `null`: on rows the condition keeps, every batch read the same
+     * window, and the purge never ended — holding the Messenger worker that runs the scheduler until
+     * systemd killed it. Bound untyped, a Uuid stored as BINARY(16) would compare as text. A window
+     * that does not move is now an error, never an endless loop.
+     *
      * @param class-string $className
      */
     private function purgeOne(
@@ -178,15 +184,19 @@ final class PurgeCommand extends Command
         bool $dryRun,
     ): int {
         $threshold = new \DateTimeImmutable($this->interval($purgeable));
+        $metadata = $this->entityManager->getClassMetadata($className);
+        $idType = $metadata->hasField('id') ? $metadata->getTypeOfField('id') : null;
         $count = 0;
         $lastId = null;
 
         while (true) {
-            $batch = $this->batch($className, $purgeable->field, $threshold, $lastId);
+            $batch = $this->batch($className, $purgeable->field, $threshold, $lastId, $idType);
 
             if ([] === $batch) {
                 break;
             }
+
+            $previousCursor = null !== $lastId ? self::scalarOf($lastId) : null;
 
             /** @var list<array{id: int|string|null, organizationId: int|null}> $purged */
             $purged = [];
@@ -194,7 +204,7 @@ final class PurgeCommand extends Command
             foreach ($batch as $entity) {
                 // Read before anything else: the cursor must advance even on a row the
                 // condition keeps, otherwise the next batch reads the same window forever.
-                $lastId = self::identifierOf($entity);
+                $lastId = self::identifierOf($metadata, $entity);
 
                 if ('' !== $purgeable->condition
                     && null !== $expressionLanguage
@@ -206,15 +216,19 @@ final class PurgeCommand extends Command
                 ++$count;
 
                 if ($dryRun) {
-                    $io->text(\sprintf('  [DRY-RUN] Would purge %s#%s', $shortName, $lastId ?? '?'));
+                    $io->text(\sprintf('  [DRY-RUN] Would purge %s#%s', $shortName, self::scalarOf($lastId) ?? '?'));
 
                     continue;
                 }
 
                 // Collected before the remove: once flushed the entity is detached, and the
                 // event has to name a row that no longer exists.
-                $purged[] = ['id' => $lastId, 'organizationId' => self::organizationOf($entity)];
+                $purged[] = ['id' => self::scalarOf($lastId), 'organizationId' => self::organizationOf($entity)];
                 $this->entityManager->remove($entity);
+            }
+
+            if (null !== $previousCursor && $previousCursor === self::scalarOf($lastId)) {
+                throw new \LogicException(\sprintf('%s: the purge cursor did not move past %s — the same rows would be read forever.', $shortName, $previousCursor));
             }
 
             if (!$dryRun && [] !== $purged) {
@@ -397,7 +411,7 @@ final class PurgeCommand extends Command
         return $resolved;
     }
 
-    private function batch(string $className, string $field, \DateTimeImmutable $threshold, int|string|null $lastId): array
+    private function batch(string $className, string $field, \DateTimeImmutable $threshold, mixed $lastId, ?string $idType): array
     {
         $builder = $this->entityManager->createQueryBuilder()
             ->select('e')
@@ -408,7 +422,7 @@ final class PurgeCommand extends Command
             ->setMaxResults($this->batchSize);
 
         if (null !== $lastId) {
-            $builder->andWhere('e.id > :lastId')->setParameter('lastId', $lastId);
+            $builder->andWhere('e.id > :lastId')->setParameter('lastId', $lastId, $idType);
         }
 
         $rows = $builder->getQuery()->getResult();
@@ -416,15 +430,25 @@ final class PurgeCommand extends Command
         return \is_array($rows) ? array_values(array_filter($rows, \is_object(...))) : [];
     }
 
-    private static function identifierOf(object $entity): int|string|null
+    /**
+     * The identifier as the entity holds it — an int, a string, or an object such as a Uuid —
+     * read through the mapping rather than a `getId()` the entity may type as it likes.
+     *
+     * @param \Doctrine\ORM\Mapping\ClassMetadata<object> $metadata
+     */
+    private static function identifierOf(\Doctrine\ORM\Mapping\ClassMetadata $metadata, object $entity): mixed
     {
-        if (!method_exists($entity, 'getId')) {
-            return null;
-        }
+        return $metadata->hasField('id') ? $metadata->getFieldValue($entity, 'id') : null;
+    }
 
-        $id = $entity->getId();
-
-        return \is_int($id) || \is_string($id) ? $id : null;
+    /** The identifier as an event and a log line carry it: a Uuid becomes its string form. */
+    private static function scalarOf(mixed $id): int|string|null
+    {
+        return match (true) {
+            \is_int($id), \is_string($id) => $id,
+            $id instanceof \Stringable => (string) $id,
+            default => null,
+        };
     }
 
     private static function organizationOf(object $entity): ?int
