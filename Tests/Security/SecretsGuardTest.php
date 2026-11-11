@@ -85,10 +85,10 @@ final class SecretsGuardTest extends TestCase
 
         self::assertSame(['STORAGE_SECRET', 'APP_ENCRYPTION_KEY', 'WTG_PREVIEW_SECRET'], $guard->violations([
             'APP_SECRET' => self::SECRET,
-            'STORAGE_SECRET' => 'cereezercereezer',
+            'STORAGE_SECRET' => 'committed-storage-secret',
             'APP_ENCRYPTION_KEY' => '',
             'WTG_PREVIEW_SECRET' => null,
-        ], ['STORAGE_SECRET' => 'cereezercereezer']));
+        ], ['STORAGE_SECRET' => 'committed-storage-secret']));
     }
 
     public function testEveryViolationIsNamedOnceWithoutItsValue(): void
@@ -111,7 +111,7 @@ final class SecretsGuardTest extends TestCase
             export JWT_PASSPHRASE=the-workstation-passphrase
             MERCURE_JWT_SECRET="!ChangeThisMercureHubJWTSecretKey!"
             STORAGE_SECRET='single quoted' # after a quote
-            STORAGE_KEY=cereezer # an inline comment
+            STORAGE_KEY=storage # an inline comment
             ESCAPED="a \"quoted\" word"
             REFERENCE=${APP_SECRET}
             not a variable
@@ -122,7 +122,7 @@ final class SecretsGuardTest extends TestCase
             'JWT_PASSPHRASE' => 'the-workstation-passphrase',
             'MERCURE_JWT_SECRET' => '!ChangeThisMercureHubJWTSecretKey!',
             'STORAGE_SECRET' => 'single quoted',
-            'STORAGE_KEY' => 'cereezer',
+            'STORAGE_KEY' => 'storage',
             'ESCAPED' => 'a "quoted" word',
             'REFERENCE' => '${APP_SECRET}',
         ], SecretsGuard::parseDotenv($content));
