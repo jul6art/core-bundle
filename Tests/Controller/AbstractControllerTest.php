@@ -9,6 +9,7 @@ use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Tests\Fixtures\Controller\ConcreteController;
 use Jul6Art\CoreBundle\Tests\Fixtures\Controller\ScopedController;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\Form\FormInterface;
@@ -163,6 +164,39 @@ final class AbstractControllerTest extends TestCase
         $request->headers->set('referer', 'https://evil.example.net/steal');
 
         self::assertSame('/url/user_index', $this->controller()->back($request, 'user_index')->getTargetUrl());
+    }
+
+    /**
+     * Referers that START with the application's origin and lead elsewhere: a longer host,
+     * credentials hiding the real host, another port, another scheme. A prefix test followed the
+     * first two.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function disguisedReferers(): iterable
+    {
+        yield 'a longer host' => ['https://app.example.com.evil.test/steal'];
+        yield 'credentials before the real host' => ['https://app.example.com@evil.test/steal'];
+        yield 'another port' => ['https://app.example.com:8443/dashboard'];
+        yield 'another scheme' => ['http://app.example.com/dashboard'];
+    }
+
+    #[DataProvider('disguisedReferers')]
+    public function testADisguisedRefererIsIgnored(string $referer): void
+    {
+        $request = Request::create('https://app.example.com/user/7/edit');
+        $request->headers->set('referer', $referer);
+
+        self::assertSame('/url/user_index', $this->controller()->back($request, 'user_index')->getTargetUrl());
+    }
+
+    /** The path and the query are kept; the origin is the request's own. */
+    public function testASameOriginRefererKeepsItsQuery(): void
+    {
+        $request = Request::create('https://app.example.com/user/7/edit');
+        $request->headers->set('referer', 'https://APP.example.com:443/users?page=2&sort=name');
+
+        self::assertSame('https://app.example.com/users?page=2&sort=name', $this->controller()->back($request, 'user_index')->getTargetUrl());
     }
 
     public function testWithoutARefererItFallsBackToTheRoute(): void

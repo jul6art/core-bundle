@@ -124,17 +124,48 @@ abstract class AbstractController extends SymfonyAbstractController
      * pointing at another host is ignored rather than trusted: following it would be an
      * open-redirect.
      *
+     * ⚠️ Same origin is decided on the PARSED Referer — scheme, host and port equal to the
+     * request's — and only its path and query are kept, after this request's own scheme and host.
+     * A prefix test let through `https://app.test.evil.test/` and `https://app.test@evil.test/`
+     * (3.8.3, audit Fable 5.2, S15).
+     *
      * @param array<string, mixed> $fallbackParams
      */
     protected function redirectBack(Request $request, string $fallbackRoute, array $fallbackParams = []): RedirectResponse
     {
         $referer = $request->headers->get('referer');
+        $path = null === $referer || '' === $referer ? null : self::sameOriginPath($request, $referer);
 
-        if (null !== $referer && '' !== $referer && str_starts_with($referer, $request->getSchemeAndHttpHost())) {
-            return $this->redirect($referer);
+        if (null !== $path) {
+            return $this->redirect($request->getSchemeAndHttpHost().$path);
         }
 
         return $this->redirectToRoute($fallbackRoute, $fallbackParams);
+    }
+
+    /**
+     * The path and query of a same-origin URL, or null when it names another origin (or carries
+     * credentials, the `user@host` form that hides the real host).
+     */
+    private static function sameOriginPath(Request $request, string $url): ?string
+    {
+        $parts = parse_url($url);
+        if (false === $parts || !isset($parts['scheme'], $parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+            return null;
+        }
+
+        $scheme = strtolower($parts['scheme']);
+        $port = $parts['port'] ?? ('https' === $scheme ? 443 : 80);
+        if ($scheme !== $request->getScheme() || strtolower($parts['host']) !== strtolower($request->getHost()) || $port !== (int) $request->getPort()) {
+            return null;
+        }
+
+        $path = $parts['path'] ?? '/';
+        if (!str_starts_with($path, '/')) {
+            return null;
+        }
+
+        return $path.(isset($parts['query']) ? '?'.$parts['query'] : '');
     }
 
     /**
