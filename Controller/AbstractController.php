@@ -127,7 +127,7 @@ abstract class AbstractController extends SymfonyAbstractController
      * ⚠️ Same origin is decided on the PARSED Referer — scheme, host and port equal to the
      * request's — and only its path and query are kept, after this request's own scheme and host.
      * A prefix test let through `https://app.test.evil.test/` and `https://app.test@evil.test/`
-     * (3.8.3, audit Fable 5.2, S15).
+     * (3.8.3).
      *
      * @param array<string, mixed> $fallbackParams
      */
