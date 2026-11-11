@@ -52,6 +52,9 @@ final class ConfigurationTest extends TestCase
                 'csp_policy' => null,
                 'headers' => [],
             ],
+            // ⚠️ Éteint par défaut, comme les en-têtes : installer le bundle ne doit pas arrêter un
+            // déploiement qui n'a pas demandé le contrôle.
+            'secrets_guard' => ['enabled' => false, 'variables' => []],
             'captcha' => [
                 'operations' => ['+'],
                 'session_key' => '_math_captcha_answer',
@@ -69,6 +72,13 @@ final class ConfigurationTest extends TestCase
             ],
             'encryption_key' => null,
         ], $this->process([]));
+    }
+
+    public function testAGuardedSecretIsTheNameOfAnEnvironmentVariable(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        $this->process([['secrets_guard' => ['variables' => ['%env(APP_SECRET)%']]]]);
     }
 
     public function testTheProfilerIsOffByDefaultAndConfigurable(): void

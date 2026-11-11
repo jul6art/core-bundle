@@ -10,6 +10,8 @@ use Jul6Art\CoreBundle\EventListener\AbstractEventListener;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
 use Jul6Art\CoreBundle\Security\CspNonce;
+use Jul6Art\CoreBundle\Security\SecretsGuard;
+use Jul6Art\CoreBundle\Security\SecretsGuardWarmer;
 use Jul6Art\CoreBundle\Twig\CspExtension;
 use Monolog\Formatter\HtmlFormatter;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -49,6 +51,33 @@ final class CoreExtensionTest extends TestCase
         self::assertFalse($container->hasDefinition(SecurityHeaderListener::class));
         self::assertTrue($container->hasDefinition(CspNonce::class));
         self::assertTrue($container->getDefinition(CspExtension::class)->hasTag('twig.extension'));
+    }
+
+    public function testTheSecretsGuardIsOffByDefault(): void
+    {
+        $container = $this->containerBuilder();
+        new CoreExtension()->load([], $container);
+
+        self::assertFalse($container->hasDefinition(SecretsGuardWarmer::class), 'Installing the bundle must not stop a deployment that did not ask for the check.');
+    }
+
+    public function testTheSecretsGuardIsACacheWarmerWithTheDeclaredSecrets(): void
+    {
+        $container = $this->containerBuilder('prod');
+        $container->setParameter('kernel.bundles', ['LexikJWTAuthenticationBundle' => 'Lexik\\Bundle\\JWTAuthenticationBundle\\LexikJWTAuthenticationBundle']);
+        new CoreExtension()->load([['secrets_guard' => ['enabled' => true, 'variables' => ['APP_ENCRYPTION_KEY']]]], $container);
+
+        self::assertTrue($container->getDefinition(SecretsGuardWarmer::class)->hasTag('kernel.cache_warmer'));
+        self::assertSame([['APP_ENCRYPTION_KEY'], true], $container->getDefinition(SecretsGuard::class)->getArguments());
+        self::assertSame('%kernel.project_dir%/.env', $container->getDefinition(SecretsGuardWarmer::class)->getArgument(2));
+    }
+
+    public function testWithoutLexikTheJwtPassphraseIsNotGuarded(): void
+    {
+        $container = $this->containerBuilder('prod', withMonolog: false);
+        new CoreExtension()->load([['secrets_guard' => ['enabled' => true]]], $container);
+
+        self::assertSame([[], false], $container->getDefinition(SecretsGuard::class)->getArguments());
     }
 
     public function testTheLogRedactionIsOnByDefaultWithItsDefaultParameters(): void

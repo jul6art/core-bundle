@@ -28,6 +28,8 @@ use Jul6Art\CoreBundle\Performance\Store\PerformanceStoreInterface;
 use Jul6Art\CoreBundle\Security\CspNonce;
 use Jul6Art\CoreBundle\Security\Encryptor;
 use Jul6Art\CoreBundle\Security\MathCaptchaService;
+use Jul6Art\CoreBundle\Security\SecretsGuard;
+use Jul6Art\CoreBundle\Security\SecretsGuardWarmer;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
@@ -83,6 +85,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
 
         $this->registerEncryption($container, \is_string($config['encryption_key'] ?? null) ? $config['encryption_key'] : null);
         $this->registerSecurityHeaders($container, \is_array($config['security_headers'] ?? null) ? $config['security_headers'] : []);
+        $this->registerSecretsGuard($container, \is_array($config['secrets_guard'] ?? null) ? $config['secrets_guard'] : []);
         $this->registerCspNonce($container);
         $this->registerCaptcha($container, \is_array($config['captcha'] ?? null) ? $config['captcha'] : []);
         $this->registerFormatting($container, $config);
@@ -259,6 +262,28 @@ class CoreExtension extends Extension implements PrependExtensionInterface
             // Priority -100: run after the controllers and the other listeners have set their
             // own headers, since this one only fills the gaps.
             ->addTag('kernel.event_listener', ['event' => 'kernel.response', 'method' => 'onKernelResponse', 'priority' => -100]);
+    }
+
+    /**
+     * The production secrets check, as a cache warmer ({@see SecretsGuardWarmer}). `JWT_PASSPHRASE`
+     * only counts where LexikJWTAuthenticationBundle is installed: elsewhere nothing reads it.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerSecretsGuard(ContainerBuilder $container, array $config): void
+    {
+        if (true !== ($config['enabled'] ?? false)) {
+            return;
+        }
+
+        $variables = \is_array($config['variables'] ?? null) ? array_values(array_filter($config['variables'], \is_string(...))) : [];
+        $bundles = $container->hasParameter('kernel.bundles') ? $container->getParameter('kernel.bundles') : [];
+
+        $container->register(SecretsGuard::class, SecretsGuard::class)
+            ->setArguments([$variables, \is_array($bundles) && isset($bundles['LexikJWTAuthenticationBundle'])]);
+        $container->register(SecretsGuardWarmer::class, SecretsGuardWarmer::class)
+            ->setArguments([new Reference(SecretsGuard::class), '%kernel.environment%', '%kernel.project_dir%/.env'])
+            ->addTag('kernel.cache_warmer');
     }
 
     /**

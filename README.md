@@ -201,6 +201,35 @@ that already lets every inline script through with `'unsafe-inline'`.
   and the fix is a listener in a script file, never `'unsafe-inline'`. Likewise `eval` and
   `new Function`, which need `'unsafe-eval'`.
 
+Production secrets guard
+------------------------
+
+A committed secret is no secret: whoever reads the repository signs the session cookies, publishes on
+the Mercure hub or opens the JWT private key. With the guard on, building a **production** cache
+(`cache:clear`, `cache:warmup`) fails while one of these is still a default:
+
+- `APP_SECRET`: empty, shorter than 32 characters, a recipe placeholder (`ChangeMe`…) or the value
+  committed in `.env`;
+- `MERCURE_JWT_SECRET`, where the application defines it: `!ChangeThisMercureHubJWTSecretKey!`;
+- `JWT_PASSPHRASE`, where LexikJWTAuthenticationBundle is installed: empty, a placeholder or the
+  committed value;
+- every variable the application declares: empty or equal to its committed `.env` value.
+
+```yaml
+# config/packages/core.yaml
+core:
+    secrets_guard:
+        enabled: true
+        variables: [APP_ENCRYPTION_KEY]
+```
+
+- **It runs at deployment, not at request time**: the cache is not built, the deployment stops, the
+  previous release keeps serving. Outside `prod`, the workstation values are fine.
+- **The message names the variables, never their values**: it ends up in a deployment log.
+- **Keep development secrets out of `.env`**: `.env.dev`, `.env.test` and `.env.docker` are where a
+  workstation value belongs; `.env` holds the names, empty.
+- Off by default: installing the bundle never stops a deployment that did not ask for the check.
+
 Captcha
 -------
 
