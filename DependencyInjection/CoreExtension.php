@@ -373,7 +373,9 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         // String event names on purpose: referencing ConsoleEvents::COMMAND would make the
         // listener unloadable in an application without symfony/console, which this bundle
         // does not require.
+        // Public: `CoreBundle::boot()` reads it to arm the type as soon as the kernel boots.
         $container->register(EncryptedTypeRegistrar::class, EncryptedTypeRegistrar::class)
+            ->setPublic(true)
             ->setArguments([new Reference(Encryptor::class)])
             ->addTag('kernel.event_listener', ['event' => 'kernel.request', 'method' => 'register', 'priority' => 4096])
             ->addTag('kernel.event_listener', ['event' => 'console.command', 'method' => 'register', 'priority' => 4096]);

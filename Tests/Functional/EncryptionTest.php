@@ -116,6 +116,29 @@ final class EncryptionTest extends AbstractFunctionalTestCase
         self::assertSame('LU12 3456 7890', $reloaded->getSecret());
     }
 
+    /**
+     * The type is armed when the kernel BOOTS: a test that persists in `setUp()`, before any request
+     * or command, used to find it without its encryptor — depending on which test a process ran first.
+     */
+    public function testTheTypeHasItsEncryptorOnceTheKernelHasBooted(): void
+    {
+        // What a fresh process has: no encryptor yet.
+        new \ReflectionProperty(EncryptedStringType::class, 'encryptor')->setValue(null, null);
+
+        $container = $this->boot('test', ['encryption_key' => self::KEY_CONFIG], withOrm: true);
+
+        $entityManager = $container->get('doctrine.orm.default_entity_manager');
+        self::assertInstanceOf(EntityManagerInterface::class, $entityManager);
+        new SchemaTool($entityManager)->createSchema([$entityManager->getClassMetadata(Gadget::class)]);
+
+        $entityManager->persist(new Gadget()->setSecret('LU12 3456 7890'));
+        $entityManager->flush();
+
+        $stored = $entityManager->getConnection()->executeQuery('SELECT secret FROM gadget')->fetchOne();
+        self::assertIsString($stored);
+        self::assertStringNotContainsString('LU12', $stored, 'Written encrypted, without a request nor a command.');
+    }
+
     public function testAnEmptySecretIsNotEncrypted(): void
     {
         $container = $this->boot('test', ['encryption_key' => self::KEY_CONFIG], withOrm: true);

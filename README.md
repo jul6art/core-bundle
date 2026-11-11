@@ -76,9 +76,10 @@ Data at rest
 ------------
 
 Setting `core.encryption_key` to a base64-encoded 32-byte key registers
-`Security\Encryptor` (libsodium XSalsa20-Poly1305 secretbox) and the listener that
-feeds it to the `encrypted_string` DBAL type. Leave the key unset and nothing is
-registered — an application that encrypts nothing carries no dead service.
+`Security\Encryptor` (libsodium XSalsa20-Poly1305 secretbox) and the registrar that
+feeds it to the `encrypted_string` DBAL type — when the kernel boots (3.8.2), and again
+at every request and console command. Leave the key unset and nothing is registered —
+an application that encrypts nothing carries no dead service.
 
 ```yaml
 # config/packages/core.yaml
