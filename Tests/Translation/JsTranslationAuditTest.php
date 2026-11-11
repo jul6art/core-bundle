@@ -53,7 +53,7 @@ final class JsTranslationAuditTest extends TestCase
     /**
      * ⚠️ The catalogue's `has()` walks the fallback, so a key present in `en` answers yes for
      * `fr` too. That is right at runtime and wrong here: it is exactly what hides an untranslated
-     * locale — `cegeta` ships five, three of them barely started. The audit asks `defines()`.
+     * locale — an application may ship five, three of them barely started. The audit asks `defines()`.
      */
     public function testAKeyMissingFromOneLocaleOnlyIsReportedForThatLocale(): void
     {

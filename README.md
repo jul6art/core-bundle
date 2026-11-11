@@ -392,7 +392,7 @@ composer require symfony/ux-translator
 **With AssetMapper** (the `web` and `admin` modes of the skeleton) there is nothing else to do:
 the package declares its own asset paths.
 
-**With Webpack Encore** (`cereezer`, `cegeta`, `superp`, `devinlive`, the `backoffice` mode), add
+**With Webpack Encore** (the skeleton's `backoffice` mode, among others), add
 the alias and the peer dependency:
 
 ```js

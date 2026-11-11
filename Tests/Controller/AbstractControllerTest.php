@@ -78,8 +78,8 @@ final class AbstractControllerTest extends TestCase
     public function testARedirectCarriesBothRouteAndMessageParameters(): void
     {
         // Le piège que ce paramètre évite : confondre les deux tableaux. Les paramètres de route
-        // fabriquent l'URL, ceux du message remplissent ses substitutions — 104 flashes de superp
-        // en ont besoin, et sans cela le raccourci était inutilisable pour eux.
+        // fabriquent l'URL, ceux du message remplissent ses substitutions — une centaine de flashes
+        // d'une application en ont besoin, et sans cela le raccourci était inutilisable pour eux.
         $response = $this->controller()->toRouteWithSuccess(
             'user_show',
             'user.created',

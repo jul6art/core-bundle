@@ -512,7 +512,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
      * ## Why the socle decides this and not each project
      *
      * The package's default dumps EVERY domain of the catalogue into the JavaScript bundle. On a
-     * back-office that is 5 955 keys in `superp`, in every locale it serves — and nobody notices,
+     * large back office that is several thousand keys, in every locale it serves — and nobody notices,
      * because nothing breaks. Left to four projects, the line would be written four times and
      * drift three.
      *

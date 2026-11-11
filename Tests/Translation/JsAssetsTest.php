@@ -20,7 +20,7 @@ use PHPUnit\Framework\TestCase;
 final class JsAssetsTest extends TestCase
 {
     /**
-     * ⚠️ Sixteen controllers across `superp` and `datatable-bundle` spread `translatableValues`
+     * ⚠️ Controllers of consumer applications and of `datatable-bundle` spread `translatableValues`
      * into their `static values`. Renaming or dropping it breaks their *import*, inside a bundle,
      * with a message no one can trace back to here.
      */

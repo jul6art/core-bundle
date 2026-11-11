@@ -43,7 +43,7 @@ final readonly class JsTranslationScanner
      * @param list<string> $excludedDirectories directory names never walked into. ⚠️ Minified
      *                                          third-party bundles are fields of one-letter
      *                                          identifiers: scanning `assets/vendor/` reported
-     *                                          sixteen dynamic calls in `cereezer` before this
+     *                                          sixteen dynamic calls in one application before this
      *                                          existed, none of them the project's own
      */
     public function __construct(

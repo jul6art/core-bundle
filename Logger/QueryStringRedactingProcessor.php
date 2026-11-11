@@ -33,7 +33,7 @@ use Monolog\Processor\ProcessorInterface;
  * handing the formatter something else is the only way to keep the value away from it. Its stack
  * trace is lost for that one record — the price.
  *
- * Moved here from cegeta (`CredentialRedactingProcessor`, ADR-0037), where it was the only one of
+ * Moved here from cegeta, where it was the only one of
  * three products to do it.
  */
 final readonly class QueryStringRedactingProcessor implements ProcessorInterface

@@ -186,7 +186,7 @@ final class JsTranslationScannerTest extends TestCase
     /**
      * ⚠️ `assets/vendor/@hotwired/turbo/turbo.index.js` is minified third-party code, and a
      * minified bundle is a field of one-letter identifiers: scanning it reported sixteen dynamic
-     * calls in `cereezer` alone. Vendored trees are not this project's translations.
+     * calls in one application alone. Vendored trees are not this project's translations.
      */
     public function testVendoredTreesAreSkipped(): void
     {

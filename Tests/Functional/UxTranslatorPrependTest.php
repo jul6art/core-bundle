@@ -17,7 +17,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  * The convention is one line of YAML and it is the whole point of the socle: a project that
  * installs `symfony/ux-translator` exposes the `javascript` domain, and only that one. Left to
  * the package's own default, every domain of the catalogue is dumped into the browser bundle —
- * 5 955 keys in `superp`, in every locale it serves.
+ * several thousand keys in a large back office, in every locale it serves.
  *
  * ⚠️ These tests assert on the FILE, not on the container. A service argument can be right while
  * the dump is empty: the UX warmer reads `TranslatorBagInterface::getCatalogues()`, which returns
