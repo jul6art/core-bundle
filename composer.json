@@ -4,6 +4,9 @@
     "description": "Symfony core bundle",
     "homepage": "https://github.com/jul6art/core-bundle",
     "license": "MIT",
+    "bin": [
+        "bin/dev-secrets"
+    ],
     "authors": [
         {
             "name": "Jul6Art",

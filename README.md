@@ -230,6 +230,29 @@ core:
   workstation value belongs; `.env` holds the names, empty.
 - Off by default: installing the bundle never stops a deployment that did not ask for the check.
 
+### A production cache on a workstation: `vendor/bin/dev-secrets`
+
+The guard refuses a workstation's `prod` cache too, and rightly: its `.env` values are the committed
+ones. `vendor/bin/dev-secrets`, run from the project's root, writes into `.env.prod.local` the secrets
+it lacks — never printing a value, never replacing one:
+
+```makefile
+secrets: ## The secrets a prod cache needs on this workstation, never shown (.env.prod.local)
+	@CONSOLE="$(CONSOLE)" vendor/bin/dev-secrets
+```
+
+- `APP_SECRET` is always fresh. `MERCURE_JWT_SECRET` (when `.env` declares it), the declared variables
+  and `JWT_PASSPHRASE` (with LexikJWT) take over the value the development stack already uses
+  (`.env.dev.local`, `.env.dev`, `.env.local`, `.env.docker`): the local hub, storage and key pair
+  go with it.
+- **Unless the guard refuses that value** — empty, a recipe placeholder, the committed one: the script
+  draws a fresh one instead and says which. A refused JWT passphrase keeps the local key pair (a
+  production run then signs no token); with no passphrase at all, the pair is regenerated.
+- **`.env.prod.local`, because Symfony reads it in `prod` only**: what the script draws never changes
+  what the development stack signs or decrypts. `vendor/bin/dev-secrets .env.docker` writes another
+  file — a project whose Compose reads it.
+- Its placeholders are the guard's, word for word: `Tests/Tooling/DevSecretsTest` keeps them equal.
+
 The production configuration, tested
 ------------------------------------
 
