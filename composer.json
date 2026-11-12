@@ -55,6 +55,10 @@
         "symfony/var-dumper": "^7.4 || ^8.0",
         "twig/twig": "^3.30"
     },
+    "conflict": {
+        "symfony/doctrine-bridge": "<7.4",
+        "symfony/polyfill-php83": "<1.31"
+    },
     "suggest": {
         "ext-sodium": "Required by Security\\Encryptor and the encrypted_string DBAL type (core.encryption_key)",
         "fakerphp/faker": "Required by the FakerAwareTrait (data fixtures)",
