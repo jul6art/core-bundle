@@ -30,6 +30,7 @@ use Jul6Art\CoreBundle\Tests\Fixtures\Repository\WidgetRepository;
 use Jul6Art\CoreBundle\Tests\Fixtures\Security\DashboardVoter;
 use Jul6Art\CoreBundle\Tests\Fixtures\Security\WidgetVoter;
 use Jul6Art\CoreBundle\Tests\Fixtures\Service\AwareService;
+use Jul6Art\CoreBundle\Tests\Fixtures\Translation\CountryLocaleSource;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\MonologBundle\MonologBundle;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
@@ -136,6 +137,11 @@ final class TestKernel extends Kernel
                     'twig',
                     'security.token_storage',
                     'security.untracked_token_storage',
+                    // The interface language (ADR-0001): the translator it rebroadcasts to, the kernel a
+                    // not-found request goes through, and the CSRF manager the switch checks.
+                    'translator',
+                    'http_kernel',
+                    'security.csrf.token_manager',
                     BulkActionRunner::class,
                     CascadeSoftDeleteHelper::class,
                     FlashTranslator::class,
@@ -245,6 +251,9 @@ final class TestKernel extends Kernel
 
         // Autowired so the #[Required] setter of AbstractVoter is really exercised: a voter
         // whose Security helper is not injected would fail on an uninitialised property.
+        // An application's own language source, named by `core.locale.sources` where a test needs it.
+        $container->register(CountryLocaleSource::class, CountryLocaleSource::class);
+
         foreach ([WidgetVoter::class, DashboardVoter::class] as $voter) {
             $container->register($voter, $voter)
                 ->setAutowired(true)

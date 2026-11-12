@@ -416,6 +416,57 @@ What you get:
 The bundle ships **no route and no page**: `jul6art/admin-bundle` provides the dashboard for
 back-office projects, and any application can render `DashboardViewBuilder::build()` its own way.
 
+Interface language
+------------------
+
+Picking, remembering and applying the interface language (since 3.11, ADR-0001): the switch the
+language selector posts to, the listener that applies the choice to the request **and** to the
+translator, and the selector's Twig functions. Off by default — an application keeps its own listener
+until it turns this on.
+
+```yaml
+# config/packages/core.yaml
+core:
+    locale:
+        enabled: true
+        supported: !php/const App\Security\BackofficeLocales::SUPPORTED   # default: kernel.enabled_locales
+        default: !php/const App\Security\BackofficeLocales::DEFAULT       # default: kernel.default_locale
+        sources: [route, session, account]   # strongest first; the order is the meaning
+```
+
+```yaml
+# config/routes/locale.yaml — the bundle declares no route
+admin_locale_switch:
+    path: /locale
+    controller: Jul6Art\CoreBundle\Controller\LocaleController
+    methods: [POST]
+```
+
+| Source | Reads |
+| --- | --- |
+| `route` | the route's `_locale`: `/fr/…` IS the page, it is not a preference |
+| `session` | the choice made in this session — the only channel on the login page; never opens a session |
+| `account` | the account's `locale` property (`account_property`), through PropertyAccess — the account implements nothing |
+| `query` | `?lang=` (`query_parameter`): a link's language; a non-string value is ignored, never a 400 |
+| `cookie` | `cookie.name`: the language chosen on an earlier visit |
+| `accept_language` | the browser's first offered language, primary subtag (`fr-BE` is `fr`); `null` when none, never the first of the list |
+| a service id | an application's own `Translation\Locale\LocaleSourceInterface`, at the rank it is listed |
+
+The first source that hands back an **offered** language wins; any other value is skipped. The switch
+(`LocaleController`) reads `locale` and `_token` (`locale_switch`) from the body — the contract of
+admin-bundle's `ui--locale-switcher` — answers 204, and remembers the choice in the session, on the
+account (saved) and in the cookie when one is configured. `remember: [route]` keeps the address's
+language in a session already open; `remember: [query]` keeps a `?…=` switch.
+
+⚠️ **The listener runs at priority 7 and broadcasts again.** The firewall fills the token at 8, and
+Symfony's `LocaleAwareListener` tells the translator at 15 and never comes back: a listener above 8
+never sees the account, a `setLocale()` below 15 without the broadcast leaves the screen in the default
+language. The not-found page gets its language too — from the address, then from the visitor's
+preference — before the error controller runs.
+
+Twig: `backoffice_locales()` lists the offered languages, `locale_flag(code)` renders an inline SVG flag
+(en, fr, nl, de, lb; an empty string otherwise) — SVG, because Windows renders flag emoji as letters.
+
 JavaScript translations
 -----------------------
 

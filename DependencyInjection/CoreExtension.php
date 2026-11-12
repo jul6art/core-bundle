@@ -7,6 +7,7 @@ namespace Jul6Art\CoreBundle\DependencyInjection;
 use Jul6Art\CoreBundle\Command\JsTranslationAuditCommand;
 use Jul6Art\CoreBundle\Command\PurgeCommand;
 use Jul6Art\CoreBundle\Controller\BulkActionRunner;
+use Jul6Art\CoreBundle\Controller\LocaleController;
 use Jul6Art\CoreBundle\Doctrine\Type\EncryptedTypeRegistrar;
 use Jul6Art\CoreBundle\EventListener\SecurityHeaderListener;
 use Jul6Art\CoreBundle\Form\Extension\NumberTypeGroupingExtension;
@@ -33,16 +34,30 @@ use Jul6Art\CoreBundle\Security\SecretsGuardWarmer;
 use Jul6Art\CoreBundle\Service\CascadeSoftDeleteHelper;
 use Jul6Art\CoreBundle\Service\FlashTranslator;
 use Jul6Art\CoreBundle\Service\NumberFormatter;
+use Jul6Art\CoreBundle\Translation\Locale\LocaleListener;
+use Jul6Art\CoreBundle\Translation\Locale\LocalePreference;
+use Jul6Art\CoreBundle\Translation\Locale\Source\AcceptLanguageSource;
+use Jul6Art\CoreBundle\Translation\Locale\Source\AccountSource;
+use Jul6Art\CoreBundle\Translation\Locale\Source\CookieSource;
+use Jul6Art\CoreBundle\Translation\Locale\Source\QuerySource;
+use Jul6Art\CoreBundle\Translation\Locale\Source\RouteSource;
+use Jul6Art\CoreBundle\Translation\Locale\Source\SessionSource;
+use Jul6Art\CoreBundle\Translation\Locale\SupportedLocales;
 use Jul6Art\CoreBundle\Twig\CspExtension;
+use Jul6Art\CoreBundle\Twig\LocaleExtension;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
 use Jul6Art\CoreBundle\Twig\PerformanceExtension;
 use Monolog\Formatter\HtmlFormatter;
 use Monolog\LogRecord;
 use Symfony\Bundle\FrameworkBundle\DataCollector\AbstractDataCollector;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
+use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
@@ -94,6 +109,103 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerPerformance($container, \is_array($config['performance'] ?? null) ? $config['performance'] : []);
         $this->registerJsTranslationAudit($container);
         $this->registerLogRedaction($container, \is_array($config['log_redaction'] ?? null) ? $config['log_redaction'] : []);
+        $this->registerLocale($container, \is_array($config['locale'] ?? null) ? $config['locale'] : []);
+    }
+
+    /**
+     * The interface language (ADR-0001): the offered list, the sources in their configured order, the
+     * preference, the listener (request at 7, after the firewall; the not-found page at 8), the switch
+     * controller when CSRF is available, and the selector's Twig functions when Twig is.
+     *
+     * @param array<mixed> $config
+     */
+    private function registerLocale(ContainerBuilder $container, array $config): void
+    {
+        if (true !== ($config['enabled'] ?? false)) {
+            return;
+        }
+
+        $supported = \is_array($config['supported'] ?? null) && [] !== $config['supported'] ? $config['supported'] : '%kernel.enabled_locales%';
+        $default = \is_string($config['default'] ?? null) && '' !== $config['default'] ? $config['default'] : '%kernel.default_locale%';
+        $container->register(SupportedLocales::class, SupportedLocales::class)
+            ->setArguments([$supported, $default])
+            ->setPublic(true);
+
+        $queryParameter = \is_string($config['query_parameter'] ?? null) ? $config['query_parameter'] : '';
+        $cookie = \is_array($config['cookie'] ?? null) ? $config['cookie'] : [];
+        $cookieName = \is_string($cookie['name'] ?? null) ? $cookie['name'] : '';
+        $accountProperty = \is_string($config['account_property'] ?? null) ? $config['account_property'] : 'locale';
+
+        $shipped = [
+            'route' => static fn (): Definition => new Definition(RouteSource::class),
+            'session' => static fn (): Definition => new Definition(SessionSource::class),
+            'account' => static fn (): Definition => new Definition(AccountSource::class, [new Reference('property_accessor'), $accountProperty]),
+            'query' => static fn (): Definition => '' !== $queryParameter
+                ? new Definition(QuerySource::class, [$queryParameter])
+                : throw new InvalidConfigurationException('core.locale.sources lists "query": set core.locale.query_parameter.'),
+            'cookie' => static fn (): Definition => '' !== $cookieName
+                ? new Definition(CookieSource::class, [$cookieName])
+                : throw new InvalidConfigurationException('core.locale.sources lists "cookie": set core.locale.cookie.name.'),
+            'accept_language' => static fn (): Definition => new Definition(AcceptLanguageSource::class, [new Reference(SupportedLocales::class)]),
+        ];
+
+        $sources = [];
+        foreach (\is_array($config['sources'] ?? null) ? $config['sources'] : [] as $source) {
+            if (!\is_string($source)) {
+                continue;
+            }
+            if (isset($shipped[$source])) {
+                $id = 'core.locale.source.'.$source;
+                $container->setDefinition($id, $shipped[$source]());
+                $sources[] = new Reference($id);
+
+                continue;
+            }
+            // An application's own source, by service id: a missing service fails the compilation.
+            $sources[] = new Reference($source);
+        }
+
+        $container->register(LocalePreference::class, LocalePreference::class)
+            ->setArguments([
+                new Reference(SupportedLocales::class),
+                new IteratorArgument($sources),
+                new Reference('property_accessor'),
+                new Reference('doctrine', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+                $accountProperty,
+                $cookieName,
+                \is_int($cookie['lifetime'] ?? null) ? $cookie['lifetime'] : 31536000,
+            ])
+            ->setPublic(true);
+
+        $container->register(LocaleListener::class, LocaleListener::class)
+            ->setArguments([
+                new Reference('security.token_storage'),
+                new Reference(LocalePreference::class),
+                new Reference(SupportedLocales::class),
+                new TaggedIteratorArgument('kernel.locale_aware'),
+                \is_array($config['remember'] ?? null) ? array_values($config['remember']) : [],
+                $queryParameter,
+            ])
+            ->addTag('kernel.event_listener', ['event' => 'kernel.request', 'method' => 'onKernelRequest', 'priority' => 7])
+            ->addTag('kernel.event_listener', ['event' => 'kernel.exception', 'method' => 'onKernelException', 'priority' => 8]);
+
+        if (interface_exists(CsrfTokenManagerInterface::class)) {
+            $container->register(LocaleController::class, LocaleController::class)
+                ->setArguments([
+                    new Reference(LocalePreference::class),
+                    new Reference(SupportedLocales::class),
+                    new Reference('security.token_storage'),
+                    new Reference('security.csrf.token_manager', ContainerInterface::NULL_ON_INVALID_REFERENCE),
+                ])
+                ->addTag('controller.service_arguments')
+                ->setPublic(true);
+        }
+
+        if (class_exists(AbstractExtension::class)) {
+            $container->register(LocaleExtension::class, LocaleExtension::class)
+                ->setArguments([new Reference(SupportedLocales::class)])
+                ->addTag('twig.extension');
+        }
     }
 
     /**

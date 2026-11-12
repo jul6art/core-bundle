@@ -46,6 +46,18 @@ final class ConfigurationTest extends TestCase
             ],
             'form' => ['number_grouping' => false],
             'log_redaction' => ['enabled' => true, 'parameters' => ['_hash', 'token', '_token', 'q', 'search']],
+            // ⚠️ Éteint par défaut (ADR-0001) : une application garde son propre écouteur de langue tant
+            // qu'elle n'allume pas la clé — deux écouteurs se disputeraient la requête.
+            'locale' => [
+                'enabled' => false,
+                'supported' => [],
+                'default' => null,
+                'sources' => ['route', 'session', 'account'],
+                'account_property' => 'locale',
+                'query_parameter' => 'lang',
+                'cookie' => ['name' => '', 'lifetime' => 31536000],
+                'remember' => [],
+            ],
             'security_headers' => [
                 'enabled' => false,
                 'csp_enforce' => false,
