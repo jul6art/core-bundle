@@ -95,7 +95,7 @@ Désactivée : une application garde son propre écouteur tant qu'elle n'active 
 | cereezer | + `accept_language` ; ses deux routes (back-office et portail) |
 | cegeta | sources `[route, session, account, query, accept_language, App\…\CountryLocaleSource]` ; sa carte des pays devient une source |
 | devingame | `remember: [route]` |
-| devinlive | sources `[account, session, cookie, accept_language]`, `account_property: preferredLocale`, cookie `user_locale` ; son `GET /change-locale/{locale}` reste, sur `LocalePreference` ; la liste des langues sort de `LocaleService` vers la configuration |
+| devinlive | sources `[route, account, session, cookie, accept_language]` (ses pages hors ligne `/hors-ligne` et `/offline` portent leur langue dans la route, que l'ancien écouteur laissait décider), `account_property: preferredLocale`, cookie `user_locale` ; son `GET /change-locale/{locale}` reste, sur `LocalePreference` ; la liste des langues sort de `LocaleService` vers la configuration |
 | squelette (web, admin) | `query_parameter: _locale`, `remember: [query]`, sources `[query, session]` |
 | superp | inchangé |
 
@@ -125,5 +125,10 @@ classes recopiées disparaissent.
 
 ## Conséquences
 
-- core-bundle 3.11.0 (version mineure, badge). Les applications montent leur plancher.
+- core-bundle 3.11.0 (version mineure ; le badge n'écrit que la majeure). Les applications montent leur
+  plancher.
+- 3.11.1 (2026-11-12, trouvé en migrant cereezer) : une route **sans état** (`_stateless`, une API) ne
+  touche plus la session — la source `session` la lisait dès qu'un cookie de session arrivait, et Symfony
+  le refuse (« Session was used while the request was declared stateless ») : les appels d'API du portail
+  de cereezer répondaient 500. L'ancienne copie ne lisait qu'une session déjà ouverte.
 - Démonstrations d'abord (cereezer, tradebot, wtg, devinthehood), puis devingame, cegeta, devinlive.
