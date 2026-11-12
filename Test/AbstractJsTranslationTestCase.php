@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Test;
 
 use Jul6Art\CoreBundle\Translation\JsTranslationAudit;
+use Jul6Art\CoreBundle\Translation\JsTranslationReport;
 use Jul6Art\CoreBundle\Translation\JsTranslationScanner;
 use Jul6Art\CoreBundle\Translation\ServerDomainScanner;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
@@ -279,7 +280,7 @@ abstract class AbstractJsTranslationTestCase extends KernelTestCase
         return $value;
     }
 
-    private function report(): \Jul6Art\CoreBundle\Translation\JsTranslationReport
+    private function report(): JsTranslationReport
     {
         self::bootKernel();
 

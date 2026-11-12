@@ -11,6 +11,7 @@ return RectorConfig::configure()
     ->withPaths([
         __DIR__.'/CoreBundle.php',
         __DIR__.'/DependencyInjection',
+        __DIR__.'/Test',
         __DIR__.'/Entity',
         __DIR__.'/EntityListener',
         __DIR__.'/Event',
