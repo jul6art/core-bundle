@@ -67,6 +67,19 @@ final class SourcesTest extends TestCase
         self::assertSame('fr', new SessionSource()->locale($request, null));
     }
 
+    public function testTheSessionSourceLeavesAStatelessRouteAlone(): void
+    {
+        $storage = new MockArraySessionStorage();
+        $storage->setSessionData(['_sf2_attributes' => [LocalePreference::SESSION_KEY => 'fr']]);
+        $session = new Session($storage);
+        $request = Request::create('/api/jobs', cookies: ['MOCKSESSID' => 'abc']);
+        $request->setSession($session);
+        $request->attributes->set('_stateless', true);
+
+        self::assertNull(new SessionSource()->locale($request, null));
+        self::assertFalse($session->isStarted(), 'Symfony refuses a session used on a stateless route.');
+    }
+
     public function testTheAccountSourceReadsTheConfiguredProperty(): void
     {
         $accessor = PropertyAccess::createPropertyAccessor();

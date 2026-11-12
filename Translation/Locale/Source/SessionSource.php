@@ -14,13 +14,17 @@ use Symfony\Component\Security\Core\User\UserInterface;
  *
  * Read from a session that is already open, or that the browser brought back (a session cookie):
  * reading never opens a new one, so a visitor's page never leaves with a cookie it did not have.
+ *
+ * ⚠️ Never on a stateless route (`_stateless`, an API): Symfony refuses a session used there ("Session
+ * was used while the request was declared stateless"), and the browser's session cookie travels with
+ * the API calls of a page all the same.
  */
 final readonly class SessionSource implements LocaleSourceInterface
 {
     #[\Override]
     public function locale(Request $request, ?UserInterface $user): ?string
     {
-        if (!$request->hasSession() || (!$request->getSession()->isStarted() && !$request->hasPreviousSession())) {
+        if (!$request->hasSession() || $request->attributes->getBoolean('_stateless') || (!$request->getSession()->isStarted() && !$request->hasPreviousSession())) {
             return null;
         }
 

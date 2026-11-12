@@ -103,6 +103,11 @@ final readonly class LocaleListener
 
     private function rememberWhatTheRequestSays(Request $request): void
     {
+        // A stateless route (an API) never touches the session: Symfony would refuse it.
+        if ($request->attributes->getBoolean('_stateless')) {
+            return;
+        }
+
         if (\in_array('route', $this->remember, true) && $request->hasPreviousSession()) {
             $fromAddress = $request->attributes->get('_locale');
             if (\is_string($fromAddress) && $this->locales->isSupported($fromAddress)) {

@@ -124,6 +124,19 @@ final class LocaleListenerTest extends TestCase
         self::assertSame('fr', $visitor->getLocale(), 'The address still decides the page.');
     }
 
+    public function testAStatelessRouteNeverTouchesTheSession(): void
+    {
+        $request = $this->requestWithSession('/api/jobs', [], cookie: true);
+        $request->attributes->set('_locale', 'fr');
+        $request->attributes->set('_stateless', true);
+        $session = $request->getSession();
+
+        $this->listener(remember: ['route'])->onKernelRequest($this->event($request));
+
+        self::assertFalse($session->isStarted(), 'Neither read nor written: Symfony refuses a session on a stateless route.');
+        self::assertSame('fr', $request->getLocale(), 'The address still decides the response.');
+    }
+
     public function testAnExplicitSwitchByLinkIsRemembered(): void
     {
         $request = Request::create('/page?_locale=fr');
