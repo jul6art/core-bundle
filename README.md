@@ -230,6 +230,29 @@ core:
   workstation value belongs; `.env` holds the names, empty.
 - Off by default: installing the bundle never stops a deployment that did not ask for the check.
 
+The production configuration, tested
+------------------------------------
+
+Settings that harden HTTP are easy to lose without anything turning red: a `trusted_hosts` moved
+under `when@dev`, the guard switched off while debugging. `Test\HttpHardeningTestCase` checks what
+the `prod` environment writes, once per project:
+
+```php
+// tests/Architecture/HttpHardeningTest.php
+final class HttpHardeningTest extends HttpHardeningTestCase
+{
+}
+```
+
+- `framework.trusted_hosts` is written, and `framework.trusted_proxies` does not trust `REMOTE_ADDR`;
+- `core.security_headers` and `core.secrets_guard` are enabled.
+
+It reads the configuration without booting a production kernel (`Test\KernelConfiguration`): the
+container is built, not compiled, so no cache warmer runs and the test secrets are never judged.
+Values stay raw — a setting written as `%env(TRUSTED_HOSTS)%` passes; the server check judges the
+value. The other bundles test their own subject the same way (auth-bundle its firewalls,
+api-bundle its operations).
+
 Captcha
 -------
 
