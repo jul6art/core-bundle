@@ -3,7 +3,7 @@
 - **Statut** : Accepted — 2026-11-12 (validé d'avance par jul6art : « écris l'ADR du lot 4, et dev le
   direct, je valide »)
 - **Décideurs** : jul6art
-- **Origine** : audit Fable 5.2, T20 (lot 4, troisième lot du chantier de remontée)
+- **Origine** : la remontée dans les bundles du code que le squelette recopiait dans chaque application (troisième de six lots)
 
 ## Contexte
 

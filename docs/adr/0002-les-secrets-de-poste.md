@@ -2,7 +2,7 @@
 
 - **Statut** : Accepted — 2026-11-12 (demande de jul6art : « améliore ces 3 points », point 2)
 - **Décideurs** : jul6art
-- **Origine** : audit Fable 5.2, T25 (`make secrets`), relevé pendant T20 (lot 4)
+- **Origine** : la commande `make secrets` du squelette, relevée pendant la remontée de la langue de l'interface dans core-bundle
 
 ## Contexte
 
