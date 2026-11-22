@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\Tests\Controller;
 
+use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Types\Type;
+use Doctrine\DBAL\Types\TypeRegistry;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -87,24 +89,21 @@ final class BulkActionRunnerTest extends TestCase
     /** An id the identifier type would refuse is dropped here, not turned into a 500 by the query. */
     public function testIdsTheIdentifierTypeRefusesAreDropped(): void
     {
-        if (!Type::hasType('test_strict_uid')) {
-            Type::getTypeRegistry()->register('test_strict_uid', new class extends Type {
-                public function getSQLDeclaration(array $column, AbstractPlatform $platform): string
-                {
-                    return 'CHAR(36)';
+        $this->identifierType('test_strict_uid', new TypeRegistry(['test_strict_uid' => new class extends Type {
+            public function getSQLDeclaration(array $column, AbstractPlatform $platform): string
+            {
+                return 'CHAR(36)';
+            }
+
+            public function convertToDatabaseValue(mixed $value, AbstractPlatform $platform): mixed
+            {
+                if (!\is_string($value) || 1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value)) {
+                    throw new \InvalidArgumentException('not a UUID');
                 }
 
-                public function convertToDatabaseValue(mixed $value, AbstractPlatform $platform): mixed
-                {
-                    if (!\is_string($value) || 1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value)) {
-                        throw new \InvalidArgumentException('not a UUID');
-                    }
-
-                    return $value;
-                }
-            });
-        }
-        $this->identifierType('test_strict_uid');
+                return $value;
+            }
+        }]));
         $repository = $this->createMock(EntityRepository::class);
         $repository->expects(self::once())->method('findBy')->with(['id' => ['01a12d8c-ae83-7e4d-8480-70cd4b8a4efa']])->willReturn([]);
         $this->entityManager->expects(self::once())->method('getRepository')->with(Widget::class)->willReturn($repository);
@@ -238,7 +237,8 @@ final class BulkActionRunnerTest extends TestCase
         $this->entityManager->expects(self::once())->method('getRepository')->willReturn($repository);
     }
 
-    private function identifierType(string $type): void
+    /** The type resolves through the connection's type provider — never DBAL's deprecated static registry. */
+    private function identifierType(string $type, ?TypeRegistry $types = null): void
     {
         $metadata = self::createStub(ClassMetadata::class);
         $metadata->method('getIdentifierFieldNames')->willReturn(['id']);
@@ -246,6 +246,11 @@ final class BulkActionRunnerTest extends TestCase
         $this->entityManager->method('getClassMetadata')->willReturn($metadata);
         $connection = self::createStub(Connection::class);
         $connection->method('getDatabasePlatform')->willReturn(new SQLitePlatform());
+        $configuration = new Configuration();
+        if ($types instanceof TypeRegistry) {
+            $configuration->setTypeProvider($types);
+        }
+        $connection->method('getConfiguration')->willReturn($configuration);
         $this->entityManager->method('getConnection')->willReturn($connection);
     }
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\Controller;
 
-use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
@@ -181,8 +180,12 @@ final class BulkActionRunner
             )));
         }
 
-        $doctrineType = Type::hasType($type) ? Type::getType($type) : null;
-        $platform = null === $doctrineType ? null : $this->entityManager->getConnection()->getDatabasePlatform();
+        // The connection's type provider, not the static registry DBAL 4.6 deprecates: it knows the same
+        // types, the application's custom ones included.
+        $connection = $this->entityManager->getConnection();
+        $types = $connection->getConfiguration()->getTypeProvider();
+        $doctrineType = $types->has($type) ? $types->get($type) : null;
+        $platform = null === $doctrineType ? null : $connection->getDatabasePlatform();
         $ids = [];
         foreach ($posted as $value) {
             if (!\is_string($value) && !\is_int($value)) {
