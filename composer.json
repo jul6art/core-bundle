@@ -15,7 +15,7 @@
         }
     ],
     "require": {
-        "php": "^8.5",
+        "php": "^8.6",
         "doctrine/collections": "^2.2 || ^3.0",
         "doctrine/dbal": "^4.2",
         "doctrine/doctrine-bundle": "^2.13 || ^3.0",
@@ -26,7 +26,6 @@
         "symfony/event-dispatcher": "^7.4 || ^8.0",
         "symfony/http-foundation": "^7.4 || ^8.0",
         "symfony/http-kernel": "^7.4 || ^8.0",
-        "symfony/polyfill-php86": "^1.37",
         "symfony/property-access": "^7.4 || ^8.0",
         "symfony/security-bundle": "^7.4 || ^8.0",
         "symfony/service-contracts": "^3.5",
