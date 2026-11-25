@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Service;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Jul6Art\CoreBundle\Util\Clock;
 use Jul6Art\CoreBundle\Util\Strings;
 
 /**
@@ -123,7 +124,7 @@ class CascadeSoftDeleteHelper
         string $column,
         ?int $timestamp = null,
     ): int {
-        $timestamp ??= time();
+        $timestamp ??= Clock::timestamp();
 
         return self::affectedRows($this->em->createQuery(\sprintf(
             "UPDATE %s e SET e.%s = CONCAT(e.%s, '%s%d') "

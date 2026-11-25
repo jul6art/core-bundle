@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Jul6Art\CoreBundle\Performance\Store;
 
+use Jul6Art\CoreBundle\Util\Clock;
 use Symfony\Component\Filesystem\Filesystem;
 
 final class JsonlFileStore implements PerformanceStoreInterface
@@ -108,8 +109,8 @@ final class JsonlFileStore implements PerformanceStoreInterface
     private function currentFileName(): string
     {
         return match ($this->rotation) {
-            self::ROTATION_DAILY => 'performance-'.date('Y-m-d').'.jsonl',
-            self::ROTATION_WEEKLY => 'performance-'.date('o-\WW').'.jsonl',
+            self::ROTATION_DAILY => 'performance-'.Clock::now()->format('Y-m-d').'.jsonl',
+            self::ROTATION_WEEKLY => 'performance-'.Clock::now()->format('o-\WW').'.jsonl',
             default => 'performance.jsonl',
         };
     }

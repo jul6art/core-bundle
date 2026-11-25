@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Jul6Art\CoreBundle\Attribute\Purgeable;
 use Jul6Art\CoreBundle\Event\EntityPurgedEvent;
 use Jul6Art\CoreBundle\Service\BulkPurgeGuard;
+use Jul6Art\CoreBundle\Util\Clock;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -183,7 +184,7 @@ final class PurgeCommand extends Command
         ?ExpressionLanguage $expressionLanguage,
         bool $dryRun,
     ): int {
-        $threshold = new \DateTimeImmutable($this->interval($purgeable));
+        $threshold = Clock::now($this->interval($purgeable));
         $metadata = $this->entityManager->getClassMetadata($className);
         $idType = $metadata->hasField('id') ? $metadata->getTypeOfField('id') : null;
         $count = 0;
@@ -305,7 +306,7 @@ final class PurgeCommand extends Command
     private function purgeBulk(SymfonyStyle $io, \Doctrine\ORM\Mapping\ClassMetadata $metadata, string $shortName, Purgeable $purgeable, bool $dryRun): int
     {
         $className = $metadata->getName();
-        $threshold = new \DateTimeImmutable($this->interval($purgeable));
+        $threshold = Clock::now($this->interval($purgeable));
         $organization = match (true) {
             $metadata->hasField('organizationId') => 'e.organizationId',
             $metadata->hasAssociation('organization') => 'IDENTITY(e.organization)',

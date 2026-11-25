@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Entity\Traits;
 
 use Doctrine\ORM\Mapping as ORM;
+use Jul6Art\CoreBundle\Util\Clock;
 use Jul6Art\CoreBundle\Util\Strings;
 
 /**
@@ -66,7 +67,7 @@ trait SoftDeletableTrait
 
     public function softDelete(): static
     {
-        $this->deletedAt = new \DateTimeImmutable();
+        $this->deletedAt = Clock::now();
 
         return $this;
     }

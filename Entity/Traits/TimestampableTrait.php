@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Entity\Traits;
 
 use Doctrine\ORM\Mapping as ORM;
+use Jul6Art\CoreBundle\Util\Clock;
 
 /**
  * `created_at` set once at insert, `updated_at` set on every subsequent update.
@@ -60,12 +61,12 @@ trait TimestampableTrait
     #[ORM\PrePersist]
     public function onPrePersist(): void
     {
-        $this->createdAt = new \DateTimeImmutable();
+        $this->createdAt = Clock::now();
     }
 
     #[ORM\PreUpdate]
     public function onPreUpdate(): void
     {
-        $this->updatedAt = new \DateTimeImmutable();
+        $this->updatedAt = Clock::now();
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Translation\Locale;
 
 use Doctrine\Persistence\ManagerRegistry;
+use Jul6Art\CoreBundle\Util\Clock;
 use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -80,7 +81,7 @@ final readonly class LocalePreference
             $response->headers->setCookie(Cookie::create(
                 $this->cookieName,
                 $locale,
-                time() + $this->cookieLifetime,
+                Clock::timestamp() + $this->cookieLifetime,
                 '/',
                 null,
                 $request->isSecure(),

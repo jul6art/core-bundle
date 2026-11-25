@@ -26,8 +26,10 @@ final class Strings
 
     /**
      * Frees a UNIQUE column value that a soft delete would otherwise keep locked: appends
-     * {@see self::DELETED_SUFFIX} plus a timestamp, so the original value can be used again by
-     * the next row. Idempotent — an already-marked value comes back unchanged.
+     * {@see self::DELETED_SUFFIX} plus the timestamp of the deletion, read on {@see Clock} like the
+     * `deletedAt` it goes with, so the original value can be used again by the next row.
+     * Idempotent — an already-marked value comes back unchanged. Two deletions of one value in the
+     * same second get the same suffix; under a frozen clock, a test moves it between the two.
      *
      * ```php
      * $user->setEmail(Strings::markDeleted($user->getEmail()));   // ada@x.test_DELETED_1755…
@@ -46,7 +48,7 @@ final class Strings
             return $value;
         }
 
-        return $value.self::DELETED_SUFFIX.time();
+        return $value.self::DELETED_SUFFIX.Clock::timestamp();
     }
 
     /**

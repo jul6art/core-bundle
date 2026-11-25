@@ -725,7 +725,9 @@ Clock::sleep(2);          // sleep(2), skipped by a frozen clock
 `now()` takes the arguments of the native constructor and returns what it would — `'today'` is
 midnight, `'+3 days'` keeps the time, a full date ignores the clock — as a plain
 `\DateTimeImmutable`. A service keeps injecting `Psr\Clock\ClockInterface`; an entity, a trait or
-a static helper, which cannot have it injected, calls `Clock`.
+a static helper, which cannot have it injected, calls `Clock`. The bundle's own timestamps
+(`TimestampableTrait`, `CreatedAtTrait`, `SoftDeletableTrait`, the purge threshold, the
+`_DELETED_<timestamp>` marker, the locale cookie, the performance log rotation) read it too.
 
 In a template, `{{ clock_now()|date('Y') }}` replaces `{{ 'now'|date('Y') }}`, which reads the
 system clock; `clock_now('+1 day')` takes the same argument as `Clock::now()`.

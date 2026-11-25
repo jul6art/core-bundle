@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jul6Art\CoreBundle\Entity\Traits;
 
 use Doctrine\ORM\Mapping as ORM;
+use Jul6Art\CoreBundle\Util\Clock;
 
 /**
  * `created_at` only — the lightweight alternative to {@see TimestampableTrait}.
@@ -42,6 +43,6 @@ trait CreatedAtTrait
     #[ORM\PrePersist]
     public function onPrePersist(): void
     {
-        $this->createdAt = new \DateTimeImmutable();
+        $this->createdAt = Clock::now();
     }
 }
