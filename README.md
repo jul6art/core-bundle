@@ -705,6 +705,49 @@ identifier (a UUID) yields `null` too.
 > administrator did in their name. `getOriginalUserIdOrNull()` returns the administrator, and
 > `null` on a genuine login — record both.
 
+Reading the time
+----------------
+
+`new \DateTimeImmutable()`, `time()` and `sleep()` read the system clock: a test cannot stop it,
+and its outcome depends on the hour it runs at. `Util\Clock` reads the global clock of Symfony
+instead — the one the `clock` service, Messenger, Lexik and every service typed
+`Psr\Clock\ClockInterface` read — so freezing it in a test freezes them all.
+
+```php
+use Jul6Art\CoreBundle\Util\Clock;
+
+Clock::now();             // new \DateTimeImmutable()
+Clock::now('-14 days');   // new \DateTimeImmutable('-14 days')
+Clock::timestamp();       // time()
+Clock::sleep(2);          // sleep(2), skipped by a frozen clock
+```
+
+`now()` takes the arguments of the native constructor and returns what it would — `'today'` is
+midnight, `'+3 days'` keeps the time, a full date ignores the clock — as a plain
+`\DateTimeImmutable`. A service keeps injecting `Psr\Clock\ClockInterface`; an entity, a trait or
+a static helper, which cannot have it injected, calls `Clock`.
+
+A test freezes and moves the time instead of waiting:
+
+```php
+use Jul6Art\CoreBundle\Test\ClockTestTrait;
+
+final class InvitationTest extends KernelTestCase
+{
+    use ClockTestTrait;
+
+    public function testTheInvitationExpires(): void
+    {
+        self::freezeClock('2026-11-24 10:00');
+        // …
+        self::advanceClock('+8 days');
+    }
+}
+```
+
+The clock is put back after each test. A test that freezes the time builds the dates it compares
+with `Clock::now()`, not with `new \DateTimeImmutable()`, which still reads the system clock.
+
 Entity traits
 -------------
 
