@@ -727,6 +727,9 @@ midnight, `'+3 days'` keeps the time, a full date ignores the clock — as a pla
 `\DateTimeImmutable`. A service keeps injecting `Psr\Clock\ClockInterface`; an entity, a trait or
 a static helper, which cannot have it injected, calls `Clock`.
 
+In a template, `{{ clock_now()|date('Y') }}` replaces `{{ 'now'|date('Y') }}`, which reads the
+system clock; `clock_now('+1 day')` takes the same argument as `Clock::now()`.
+
 A test freezes and moves the time instead of waiting:
 
 ```php

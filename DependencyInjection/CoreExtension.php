@@ -43,6 +43,7 @@ use Jul6Art\CoreBundle\Translation\Locale\Source\QuerySource;
 use Jul6Art\CoreBundle\Translation\Locale\Source\RouteSource;
 use Jul6Art\CoreBundle\Translation\Locale\Source\SessionSource;
 use Jul6Art\CoreBundle\Translation\Locale\SupportedLocales;
+use Jul6Art\CoreBundle\Twig\ClockExtension;
 use Jul6Art\CoreBundle\Twig\CspExtension;
 use Jul6Art\CoreBundle\Twig\LocaleExtension;
 use Jul6Art\CoreBundle\Twig\NumberExtension;
@@ -102,6 +103,7 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         $this->registerSecurityHeaders($container, \is_array($config['security_headers'] ?? null) ? $config['security_headers'] : []);
         $this->registerSecretsGuard($container, \is_array($config['secrets_guard'] ?? null) ? $config['secrets_guard'] : []);
         $this->registerCspNonce($container);
+        $this->registerClock($container);
         $this->registerCaptcha($container, \is_array($config['captcha'] ?? null) ? $config['captcha'] : []);
         $this->registerFormatting($container, $config);
         $this->registerFlashTranslator($container, \is_array($config['flash'] ?? null) ? $config['flash'] : []);
@@ -411,6 +413,18 @@ class CoreExtension extends Extension implements PrependExtensionInterface
         if (class_exists(AbstractExtension::class)) {
             $container->register(CspExtension::class, CspExtension::class)
                 ->setArguments([new Reference(CspNonce::class)])
+                ->addTag('twig.extension');
+        }
+    }
+
+    /**
+     * `clock_now()`, registered whatever the configuration: a template that prints the year reads
+     * the clock a test can freeze, not the system one.
+     */
+    private function registerClock(ContainerBuilder $container): void
+    {
+        if (class_exists(AbstractExtension::class)) {
+            $container->register(ClockExtension::class, ClockExtension::class)
                 ->addTag('twig.extension');
         }
     }

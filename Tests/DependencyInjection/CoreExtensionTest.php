@@ -12,6 +12,7 @@ use Jul6Art\CoreBundle\Logger\QueryStringRedactingProcessor;
 use Jul6Art\CoreBundle\Security\CspNonce;
 use Jul6Art\CoreBundle\Security\SecretsGuard;
 use Jul6Art\CoreBundle\Security\SecretsGuardWarmer;
+use Jul6Art\CoreBundle\Twig\ClockExtension;
 use Jul6Art\CoreBundle\Twig\CspExtension;
 use Monolog\Formatter\HtmlFormatter;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -51,6 +52,17 @@ final class CoreExtensionTest extends TestCase
         self::assertFalse($container->hasDefinition(SecurityHeaderListener::class));
         self::assertTrue($container->hasDefinition(CspNonce::class));
         self::assertTrue($container->getDefinition(CspExtension::class)->hasTag('twig.extension'));
+    }
+
+    /**
+     * A template that prints the year calls `clock_now()` whatever the configuration.
+     */
+    public function testTheClockFunctionIsRegisteredWithoutConfiguration(): void
+    {
+        $container = $this->containerBuilder();
+        new CoreExtension()->load([], $container);
+
+        self::assertTrue($container->getDefinition(ClockExtension::class)->hasTag('twig.extension'));
     }
 
     public function testTheSecretsGuardIsOffByDefault(): void
